@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+=<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -25,7 +25,6 @@
     const SUPABASE_URL = 'https://hpozhvkrlckwybrjasjn.supabase.co'
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhwb3podmtybGNrd3licmphc2puIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNzI2NDEsImV4cCI6MjA2Mjk0ODY0MX0.2bbU0qD1zGmJjAQpSPjub5De4ZCD5NqRd9SEhzptI28'
 
-    // Create supabase client with a different variable name
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
     const sendBtn = document.getElementById('sendBtn')
@@ -42,12 +41,14 @@
         return
       }
 
+      // Insert message, no columns param, just clean insert
       const { data, error } = await supabaseClient
         .from('messages')
         .insert([{ message, channel_id }])
 
       if (error) {
         status.textContent = 'Error: ' + error.message
+        console.error('Insert error:', error)
       } else {
         status.textContent = 'Message sent successfully!'
         messageInput.value = ''
