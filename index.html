@@ -2,205 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Webhook Messager</title>
-  <style>
-    /* Dark theme styles */
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #121212;
-      color: #e0e0e0;
-      margin: 40px auto;
-      max-width: 600px;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.8);
-    }
-
-    h1, h2 {
-      color: #81a1c1;
-      margin-bottom: 10px;
-    }
-
-    input, textarea, select, button {
-      width: 100%;
-      margin: 10px 0;
-      padding: 10px;
-      font-size: 16px;
-      border-radius: 8px;
-      box-sizing: border-box;
-      border: 1px solid #444;
-      background-color: #222;
-      color: #eee;
-      transition: border-color 0.3s ease;
-    }
-    input:focus, textarea:focus, select:focus {
-      border-color: #81a1c1;
-      outline: none;
-      background-color: #1a1a1a;
-    }
-
-    button {
-      background-color: #5e81ac;
-      color: white;
-      border: none;
-      cursor: pointer;
-      transition: background 0.3s ease;
-      font-weight: 600;
-    }
-    button:hover {
-      background-color: #81a1c1;
-    }
-
-    ul {
-      list-style-type: none;
-      padding: 0;
-      max-height: 200px;
-      overflow-y: auto;
-      border: 1px solid #444;
-      border-radius: 8px;
-      background-color: #1e1e1e;
-    }
-
-    li {
-      padding: 8px 12px;
-      border-bottom: 1px solid #333;
-      word-wrap: break-word;
-    }
-    li:last-child {
-      border-bottom: none;
-    }
-
-    .hidden {
-      display: none;
-    }
-
-    .webhook-entry {
-      display: flex;
-      flex-direction: column;
-      margin-bottom: 5px;
-    }
-
-    .webhook-name {
-      font-weight: bold;
-      color: #88c0d0;
-    }
-
-    .button-row {
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
-      flex-wrap: wrap;
-    }
-
-    #toggleListBtn, #postAllBtn, #resetBtn {
-      width: auto;
-      padding: 10px 20px;
-      font-size: 14px;
-      flex-grow: 1;
-    }
-
-    #status {
-      margin-top: 15px;
-      min-height: 24px;
-      font-weight: 600;
-    }
-  </style>
+  <title>Pippy bots</title>
 </head>
 <body>
-  <h1>Webhook Messager</h1>
+  <h1>Send Message</h1>
 
-  <h2>Add Webhook</h2>
-  <input type="text" id="webhookInput" placeholder="Enter Webhook URL" />
-  <input type="text" id="webhookNameInput" placeholder="Enter a name (optional)" />
-  <button id="addWebhookBtn">Add Webhook</button>
+  <select id="channelSelect">
+    <option value="https://discord.com/api/webhooks/1372798063629959168/Ez2bPgWpoBcV1BXTtfhO67BDxARIK49N3Rykfl7qQm4YoNB49QRi1qAmuVh4HEKwmcOb">general</option>
+    <option value="https://discord.com/api/webhooks/1372820745188675634/2aNS8fMWh5VhAOAJJURC3z1380-7yHmam_mxcPfNxbCroCNpVjg20DAVJCUmi3I60uHJ">updates</option>
+    <option value="https://discord.com/api/webhooks/1372820921051512912/TME_20Q-Tajd4LKFgT7Pa0EgMzKjYnKk5-ytmTl9L5VWWLYPHz3ePSA3gC8ImlTc_ITI">announcements</option>
+  </select>
 
-  <div class="button-row">
-    <button id="toggleListBtn">Show Webhook List</button>
-    <button id="postAllBtn">Post to All</button>
-    <button id="resetBtn">Reset</button>
-  </div>
+  <br /><br />
 
-  <div id="webhookContainer" class="hidden">
-    <h2>Webhook List</h2>
-    <ul id="webhookList"></ul>
-  </div>
-
-  <h2>Send Message</h2>
-  <select id="channelSelect"></select>
-
-  <textarea id="messageInput" rows="5" placeholder="Your message here"></textarea>
+  <textarea id="messageInput" rows="5" cols="40" placeholder="Your message here"></textarea>
+  <br />
   <button id="sendBtn">Send</button>
   <p id="status"></p>
 
   <script>
-    const defaultWebhooks = [
-      {
-        url: 'https://discord.com/api/webhooks/1372798063629959168/Ez2bPgWpoBcV1BXTtfhO67BDxARIK49N3Rykfl7qQm4YoNB49QRi1qAmuVh4HEKwmcOb',
-        name: 'general'
-      },
-      {
-        url: 'https://discord.com/api/webhooks/1372820745188675634/2aNS8fMWh5VhAOAJJURC3z1380-7yHmam_mxcPfNxbCroCNpVjg20DAVJCUmi3I60uHJ',
-        name: 'updates'
-      },
-      {
-        url: 'https://discord.com/api/webhooks/1372820921051512912/TME_20Q-Tajd4LKFgT7Pa0EgMzKjYnKk5-ytmTl9L5VWWLYPHz3ePSA3gC8ImlTc_ITI',
-        name: 'announcements'
-      }
-    ];
-
     const sendBtn = document.getElementById('sendBtn');
     const messageInput = document.getElementById('messageInput');
     const channelSelect = document.getElementById('channelSelect');
     const status = document.getElementById('status');
-    const webhookInput = document.getElementById('webhookInput');
-    const webhookNameInput = document.getElementById('webhookNameInput');
-    const addWebhookBtn = document.getElementById('addWebhookBtn');
-    const webhookListEl = document.getElementById('webhookList');
-    const toggleListBtn = document.getElementById('toggleListBtn');
-    const webhookContainer = document.getElementById('webhookContainer');
-    const postAllBtn = document.getElementById('postAllBtn');
-    const resetBtn = document.getElementById('resetBtn');
-
-    let webhookList = JSON.parse(localStorage.getItem('webhooks'));
-
-    if (!Array.isArray(webhookList) || webhookList.length === 0) {
-      webhookList = [...defaultWebhooks];
-      localStorage.setItem('webhooks', JSON.stringify(webhookList));
-    }
-
-    function renderList() {
-      webhookListEl.innerHTML = '';
-      channelSelect.innerHTML = '';
-      webhookList.forEach((entry, index) => {
-        const li = document.createElement('li');
-        li.classList.add('webhook-entry');
-        li.innerHTML = `<span class="webhook-name">${entry.name || `Webhook ${index + 1}`}</span><br><small>${entry.url}</small>`;
-        webhookListEl.appendChild(li);
-
-        const option = document.createElement('option');
-        option.value = entry.url;
-        option.textContent = entry.name || `Webhook ${index + 1}`;
-        channelSelect.appendChild(option);
-      });
-    }
-
-    addWebhookBtn.addEventListener('click', () => {
-      const url = webhookInput.value.trim();
-      const name = webhookNameInput.value.trim();
-      if (!url || !url.startsWith('https://discord.com/api/webhooks/')) {
-        alert('Please enter a valid Discord webhook URL');
-        return;
-      }
-      if (webhookList.some(entry => entry.url === url)) {
-        alert('This webhook is already added.');
-        return;
-      }
-      webhookList.push({ url, name: name || `Webhook ${webhookList.length + 1}` });
-      localStorage.setItem('webhooks', JSON.stringify(webhookList));
-      webhookInput.value = '';
-      webhookNameInput.value = '';
-      renderList();
-    });
 
     sendBtn.addEventListener('click', async () => {
       const message = messageInput.value.trim();
@@ -214,7 +38,9 @@
       try {
         const response = await fetch(webhookURL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({ content: message })
         });
 
@@ -229,24 +55,6 @@
         status.textContent = 'Error: ' + error.message;
       }
     });
-
-    postAllBtn.addEventListener('click', async () => {
-      const message = messageInput.value.trim();
-      if (!message) {
-        status.textContent = 'Please enter a message to post to all webhooks.';
-        return;
-      }
-      status.textContent = 'Sending to all webhooks...';
-
-      let successCount = 0;
-      let failureCount = 0;
-
-      await Promise.all(webhookList.map(async (entry) => {
-        try {
-          const res = await fetch(entry.url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: message })
-          });
-          if (res.ok) {
-            successCount
+  </script>
+</body>
+</html>
