@@ -5,16 +5,19 @@
   <title>PippyBots</title>
 </head>
 <body>
-  <h1>Send Message</h1>
+  <h1>Add webhook</h1>
+  <input type="text" id="webhookInput" placeholder="Enter Webhook URL" />
+  <button id="addWebhookBtn">Add Webhook</button>
 
+  <h2>Webhook List</h2>
+  <ul id="webhookList"></ul>
+
+  <h1>Send Message</h1>
   <select id="channelSelect">
-    <option value="https://discord.com/api/webhooks/1372798063629959168/Ez2bPgWpoBcV1BXTtfhO67BDxARIK49N3Rykfl7qQm4YoNB49QRi1qAmuVh4HEKwmcOb">general</option>
-    <option value="https://discord.com/api/webhooks/1372820745188675634/2aNS8fMWh5VhAOAJJURC3z1380-7yHmam_mxcPfNxbCroCNpVjg20DAVJCUmi3I60uHJ">updates</option>
-    <option value="https://discord.com/api/webhooks/1372820921051512912/TME_20Q-Tajd4LKFgT7Pa0EgMzKjYnKk5-ytmTl9L5VWWLYPHz3ePSA3gC8ImlTc_ITI">announcements</option>
+    <!-- Dynamically populated -->
   </select>
 
   <br /><br />
-
   <textarea id="messageInput" rows="5" cols="40" placeholder="Your message here"></textarea>
   <br />
   <button id="sendBtn">Send</button>
@@ -25,6 +28,60 @@
     const messageInput = document.getElementById('messageInput');
     const channelSelect = document.getElementById('channelSelect');
     const status = document.getElementById('status');
+    const webhookInput = document.getElementById('webhookInput');
+    const addWebhookBtn = document.getElementById('addWebhookBtn');
+    const webhookListEl = document.getElementById('webhookList');
+
+    const defaultWebhooks = [
+      'https://discord.com/api/webhooks/1372798063629959168/Ez2bPgWpoBcV1BXTtfhO67BDxARIK49N3Rykfl7qQm4YoNB49QRi1qAmuVh4HEKwmcOb',
+      'https://discord.com/api/webhooks/1372820745188675634/2aNS8fMWh5VhAOAJJURC3z1380-7yHmam_mxcPfNxbCroCNpVjg20DAVJCUmi3I60uHJ',
+      'https://discord.com/api/webhooks/1372820921051512912/TME_20Q-Tajd4LKFgT7Pa0EgMzKjYnKk5-ytmTl9L5VWWLYPHz3ePSA3gC8ImlTc_ITI'
+    ];
+
+    let webhookList = JSON.parse(localStorage.getItem('webhooks'));
+
+    // If no saved list, initialize with default webhooks
+    if (!Array.isArray(webhookList) || webhookList.length === 0) {
+      webhookList = [...defaultWebhooks];
+      localStorage.setItem('webhooks', JSON.stringify(webhookList));
+    } else {
+      // Merge missing default webhooks (if user cleared them)
+      defaultWebhooks.forEach(url => {
+        if (!webhookList.includes(url)) webhookList.push(url);
+      });
+      localStorage.setItem('webhooks', JSON.stringify(webhookList));
+    }
+
+    function renderList() {
+      webhookListEl.innerHTML = '';
+      channelSelect.innerHTML = '';
+      webhookList.forEach((url, index) => {
+        const li = document.createElement('li');
+        li.textContent = url;
+        webhookListEl.appendChild(li);
+
+        const option = document.createElement('option');
+        option.value = url;
+        option.textContent = `Webhook ${index + 1}`;
+        channelSelect.appendChild(option);
+      });
+    }
+
+    addWebhookBtn.addEventListener('click', () => {
+      const url = webhookInput.value.trim();
+      if (url && url.startsWith('https://discord.com/api/webhooks/')) {
+        if (!webhookList.includes(url)) {
+          webhookList.push(url);
+          localStorage.setItem('webhooks', JSON.stringify(webhookList));
+          renderList();
+        } else {
+          alert('Webhook already exists.');
+        }
+        webhookInput.value = '';
+      } else {
+        alert('Please enter a valid Discord webhook URL');
+      }
+    });
 
     sendBtn.addEventListener('click', async () => {
       const message = messageInput.value.trim();
@@ -55,6 +112,9 @@
         status.textContent = 'Error: ' + error.message;
       }
     });
+
+    // Render the webhook list on page load
+    renderList();
   </script>
 </body>
 </html>
