@@ -2,10 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Send Message via Discord Webhook</title>
+  <title>PippyBots</title>
 </head>
 <body>
-  <h1>Send Message to Discord</h1>
+  <h1>Send Message</h1>
+
+  <select id="channelSelect">
+    <option value="https://discord.com/api/webhooks/1372798063629959168/Ez2bPgWpoBcV1BXTtfhO67BDxARIK49N3Rykfl7qQm4YoNB49QRi1qAmuVh4HEKwmcOb">general</option>
+    <option value="https://discord.com/api/webhooks/1372820745188675634/2aNS8fMWh5VhAOAJJURC3z1380-7yHmam_mxcPfNxbCroCNpVjg20DAVJCUmi3I60uHJ">updates</option>
+    <option value="https://discord.com/api/webhooks/1372820921051512912/TME_20Q-Tajd4LKFgT7Pa0EgMzKjYnKk5-ytmTl9L5VWWLYPHz3ePSA3gC8ImlTc_ITI">announcements</option>
+  </select>
+
+  <br /><br />
 
   <textarea id="messageInput" rows="5" cols="40" placeholder="Your message here"></textarea>
   <br />
@@ -13,14 +21,14 @@
   <p id="status"></p>
 
   <script>
-    const webhookURL = 'https://discord.com/api/webhooks/1372798063629959168/Ez2bPgWpoBcV1BXTtfhO67BDxARIK49N3Rykfl7qQm4YoNB49QRi1qAmuVh4HEKwmcOb';
-
     const sendBtn = document.getElementById('sendBtn');
     const messageInput = document.getElementById('messageInput');
+    const channelSelect = document.getElementById('channelSelect');
     const status = document.getElementById('status');
 
     sendBtn.addEventListener('click', async () => {
       const message = messageInput.value.trim();
+      const webhookURL = channelSelect.value;
 
       if (!message) {
         status.textContent = 'Please enter a message.';
