@@ -2,97 +2,59 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Discord Webhook Manager</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-    body { display: flex; height: 100vh; background: #1e1e2f; color: white; }
-    .sidebar { width: 250px; background: #2a2a3d; padding: 20px; overflow-y: auto; }
-    .sidebar h2 { margin-bottom: 10px; font-size: 18px; }
-    .webhook-item { background: #393955; padding: 10px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; }
-    .webhook-item.active { background: #5c5c8a; }
-    .main { flex: 1; display: flex; flex-direction: column; padding: 20px; }
-    .input-row { display: flex; gap: 10px; margin-bottom: 10px; }
-    input, textarea { width: 100%; padding: 10px; border: none; border-radius: 8px; background: #2a2a3d; color: white; }
-    button { padding: 10px 20px; background: #5865f2; color: white; border: none; border-radius: 8px; cursor: pointer; }
-    .message-box { flex-grow: 1; }
-  </style>
+  <title>Pippy bots</title>
 </head>
 <body>
-  <div class="sidebar">
-    <h2>Webhooks</h2>
-    <div id="webhookList"></div>
-    <input type="text" id="newWebhookName" placeholder="Webhook name" />
-    <input type="text" id="newWebhookUrl" placeholder="Webhook URL" />
-    <button onclick="addWebhook()">Add Webhook</button>
-  </div>
+  <h1>Send Message</h1>
 
-  <div class="main">
-    <div class="input-row">
-      <input type="text" id="username" placeholder="Username" />
-      <input type="text" id="avatarUrl" placeholder="Avatar URL" />
-    </div>
-    <textarea id="message" class="message-box" placeholder="Type your message..."></textarea>
-    <button onclick="sendMessage()">Send</button>
-  </div>
+  <select id="channelSelect">
+    <option value="https://discord.com/api/webhooks/1372798063629959168/Ez2bPgWpoBcV1BXTtfhO67BDxARIK49N3Rykfl7qQm4YoNB49QRi1qAmuVh4HEKwmcOb">general</option>
+    <option value="https://discord.com/api/webhooks/1372820745188675634/2aNS8fMWh5VhAOAJJURC3z1380-7yHmam_mxcPfNxbCroCNpVjg20DAVJCUmi3I60uHJ">updates</option>
+    <option value="https://discord.com/api/webhooks/1372820921051512912/TME_20Q-Tajd4LKFgT7Pa0EgMzKjYnKk5-ytmTl9L5VWWLYPHz3ePSA3gC8ImlTc_ITI">announcements</option>
+  </select>
+
+  <br /><br />
+
+  <textarea id="messageInput" rows="5" cols="40" placeholder="Your message here"></textarea>
+  <br />
+  <button id="sendBtn">Send</button>
+  <p id="status"></p>
 
   <script>
-    let selectedWebhook = null;
+    const sendBtn = document.getElementById('sendBtn');
+    const messageInput = document.getElementById('messageInput');
+    const channelSelect = document.getElementById('channelSelect');
+    const status = document.getElementById('status');
 
-    function loadWebhooks() {
-      const list = document.getElementById('webhookList');
-      list.innerHTML = '';
-      const webhooks = JSON.parse(localStorage.getItem('webhooks') || '[]');
-      webhooks.forEach((wh, idx) => {
-        const div = document.createElement('div');
-        div.textContent = wh.name;
-        div.className = 'webhook-item' + (selectedWebhook === idx ? ' active' : '');
-        div.onclick = () => { selectedWebhook = idx; loadWebhooks(); };
-        list.appendChild(div);
-      });
-    }
+    sendBtn.addEventListener('click', async () => {
+      const message = messageInput.value.trim();
+      const webhookURL = channelSelect.value;
 
-    function addWebhook() {
-      const name = document.getElementById('newWebhookName').value.trim();
-      const url = document.getElementById('newWebhookUrl').value.trim();
-      if (!name || !url) return alert('Please enter both name and URL');
-      const webhooks = JSON.parse(localStorage.getItem('webhooks') || '[]');
-      webhooks.push({ name, url });
-      localStorage.setItem('webhooks', JSON.stringify(webhooks));
-      document.getElementById('newWebhookName').value = '';
-      document.getElementById('newWebhookUrl').value = '';
-      loadWebhooks();
-    }
+      if (!message) {
+        status.textContent = 'Please enter a message.';
+        return;
+      }
 
-    function sendMessage() {
-      const webhooks = JSON.parse(localStorage.getItem('webhooks') || '[]');
-      if (selectedWebhook === null || !webhooks[selectedWebhook]) return alert('Select a webhook');
+      try {
+        const response = await fetch(webhookURL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ content: message })
+        });
 
-      const url = webhooks[selectedWebhook].url;
-      const username = document.getElementById('username').value || undefined;
-      const avatar_url = document.getElementById('avatarUrl').value || undefined;
-      const content = document.getElementById('message').value.trim();
-
-      if (!content) return alert('Message cannot be empty');
-
-      fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, avatar_url, content }),
-      })
-        .then(async (res) => {
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            throw new Error(data.message || 'Error sending message');
-          }
-          alert('Message sent!');
-          document.getElementById('message').value = '';
-        })
-        .catch((err) => alert('Failed to send: ' + err.message));
-    }
-
-    loadWebhooks();
+        if (response.ok) {
+          status.textContent = 'Message sent successfully!';
+          messageInput.value = '';
+        } else {
+          const errorText = await response.text();
+          status.textContent = 'Error sending message: ' + errorText;
+        }
+      } catch (error) {
+        status.textContent = 'Error: ' + error.message;
+      }
+    });
   </script>
 </body>
 </html>
