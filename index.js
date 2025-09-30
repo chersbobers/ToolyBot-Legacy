@@ -13,6 +13,15 @@ app.get('/', (req, res) => {
   res.send('Bot is running!');
 });
 
+client.user.setPresence({
+  activities: [{
+    name: 'Being tooly',
+    type: 0 
+  }],
+  status: 'online'
+});
+
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
@@ -54,6 +63,7 @@ const commands = [
     .addStringOption(option => option.setName('color').setDescription('Hex color (e.g., #FF0000)').setRequired(false)),
   new SlashCommandBuilder().setName('checkvideos').setDescription('Check for new PippyOC videos (Mod only)'),
   new SlashCommandBuilder().setName('help').setDescription('Show all commands'),
+  
 ];
 
 async function checkForNewVideos() {
