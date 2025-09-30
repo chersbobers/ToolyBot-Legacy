@@ -1,0 +1,21 @@
+{
+  "name": "discord-helper-bot",
+  "version": "1.0.0",
+  "description": "A Discord helper bot with YouTube notifications",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "@discordjs/voice": "^0.16.1",
+    "node-gtts": "^2.0.2",
+    "express": "^4.18.2",
+    "ffmpeg-static": "^5.2.0",
+    "opusscript": "^0.0.8",
+    "rss-parser": "^3.13.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
