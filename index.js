@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource } = require('@discordjs/voice');
 const gtts = require('node-gtts')('en');
 const fs = require('fs');
@@ -6,7 +6,6 @@ const path = require('path');
 const express = require('express');
 const Parser = require('rss-parser');
 
-// Create Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -18,7 +17,6 @@ app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
-// Create Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -29,15 +27,35 @@ const client = new Client({
 });
 
 const parser = new Parser();
-
-// Store last video ID to avoid duplicate notifications
 let lastVideoId = '';
-
-// YouTube channel ID - Set in Render environment variables
 const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 const NOTIFICATION_CHANNEL_ID = process.env.NOTIFICATION_CHANNEL_ID;
+const cooldowns = new Map();
 
-// Check for new videos every 5 minutes
+const commands = [
+  new SlashCommandBuilder().setName('hello').setDescription('Say hello'),
+  new SlashCommandBuilder().setName('ping').setDescription('Check bot latency'),
+  new SlashCommandBuilder().setName('serverinfo').setDescription('Show server information'),
+  new SlashCommandBuilder().setName('userinfo').setDescription('Show your user information'),
+  new SlashCommandBuilder().setName('roll').setDescription('Roll a dice'),
+  new SlashCommandBuilder().setName('flip').setDescription('Flip a coin'),
+  new SlashCommandBuilder().setName('8ball').setDescription('Ask the magic 8-ball')
+    .addStringOption(option => option.setName('question').setDescription('Your question').setRequired(true)),
+  new SlashCommandBuilder().setName('kitty').setDescription('Get a random cat picture'),
+  new SlashCommandBuilder().setName('join').setDescription('Join your voice channel'),
+  new SlashCommandBuilder().setName('leave').setDescription('Leave voice channel'),
+  new SlashCommandBuilder().setName('tts').setDescription('Text-to-speech in voice channel')
+    .addStringOption(option => option.setName('text').setDescription('Text to speak').setRequired(true)),
+  new SlashCommandBuilder().setName('say').setDescription('Make the bot say something (Admin only)')
+    .addStringOption(option => option.setName('message').setDescription('Message to send').setRequired(true)),
+  new SlashCommandBuilder().setName('embed').setDescription('Send an embed message (Admin only)')
+    .addStringOption(option => option.setName('text').setDescription('Embed text').setRequired(true))
+    .addStringOption(option => option.setName('image').setDescription('Image URL (optional)').setRequired(false))
+    .addStringOption(option => option.setName('color').setDescription('Hex color (e.g., #FF0000)').setRequired(false)),
+  new SlashCommandBuilder().setName('checkvideos').setDescription('Check for new PippyOC videos (Mod only)'),
+  new SlashCommandBuilder().setName('help').setDescription('Show all commands'),
+];
+
 async function checkForNewVideos() {
   try {
     const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${YOUTUBE_CHANNEL_ID}`;
@@ -46,7 +64,6 @@ async function checkForNewVideos() {
     if (feed.items && feed.items.length > 0) {
       const latestVideo = feed.items[0];
       
-      // If this is a new video (different from last check)
       if (latestVideo.id !== lastVideoId && lastVideoId !== '') {
         const channel = client.channels.cache.get(NOTIFICATION_CHANNEL_ID);
         
@@ -77,32 +94,248 @@ async function checkForNewVideos() {
   }
 }
 
-// When bot is ready
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}!`);
   
-  // Initialize lastVideoId on startup
-  checkForNewVideos();
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   
-  // Check for new videos every 5 minutes (300000 ms)
+  try {
+    console.log('Registering slash commands...');
+    const commandsJson = commands.map(command => command.toJSON());
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commandsJson });
+    console.log('Slash commands registered!');
+  } catch (error) {
+    console.error('Error registering commands:', error);
+  }
+  
+  checkForNewVideos();
   setInterval(checkForNewVideos, 300000);
 });
 
-// Cooldown map for rate limiting
-const cooldowns = new Map();
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
 
-// Message commands
+  const { commandName } = interaction;
+
+  if (commandName === 'hello') {
+    await interaction.reply('Hello! 👋');
+  }
+
+  if (commandName === 'ping') {
+    await interaction.reply(`🏓 Pong! Latency: ${client.ws.ping}ms`);
+  }
+
+  if (commandName === 'serverinfo') {
+    const embed = new EmbedBuilder()
+      .setColor(0x0099ff)
+      .setTitle(interaction.guild.name)
+      .setThumbnail(interaction.guild.iconURL())
+      .addFields(
+        { name: '👥 Members', value: `${interaction.guild.memberCount}`, inline: true },
+        { name: '📅 Created', value: interaction.guild.createdAt.toDateString(), inline: true },
+        { name: '🆔 Server ID', value: interaction.guild.id, inline: true }
+      )
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed] });
+  }
+
+  if (commandName === 'userinfo') {
+    const user = interaction.user;
+    const embed = new EmbedBuilder()
+      .setColor(0x00ff00)
+      .setTitle('User Information')
+      .setThumbnail(user.displayAvatarURL())
+      .addFields(
+        { name: '👤 Username', value: user.username, inline: true },
+        { name: '🆔 User ID', value: user.id, inline: true },
+        { name: '📅 Account Created', value: user.createdAt.toDateString(), inline: false }
+      );
+
+    await interaction.reply({ embeds: [embed] });
+  }
+
+  if (commandName === 'roll') {
+    const roll = Math.floor(Math.random() * 6) + 1;
+    await interaction.reply(`🎲 You rolled a **${roll}**!`);
+  }
+
+  if (commandName === 'flip') {
+    const result = Math.random() < 0.5 ? 'Heads' : 'Tails';
+    await interaction.reply(`🪙 The coin landed on **${result}**!`);
+  }
+
+  if (commandName === '8ball') {
+    const question = interaction.options.getString('question');
+    const responses = [
+      'Yes, definitely!', 'No way!', 'Maybe...', 'Ask again later',
+      'Absolutely!', 'I doubt it', 'Signs point to yes', 'Very doubtful',
+      'Without a doubt', 'My sources say no', 'Outlook good', 'Cannot predict now'
+    ];
+    const answer = responses[Math.floor(Math.random() * responses.length)];
+    await interaction.reply(`🎱 **${question}**\n${answer}`);
+  }
+
+  if (commandName === 'kitty') {
+    try {
+      const response = await fetch('https://api.thecatapi.com/v1/images/search');
+      const data = await response.json();
+      const catUrl = data[0].url;
+      
+      const embed = new EmbedBuilder()
+        .setColor(0xFF69B4)
+        .setTitle('🐱 Random Kitty!')
+        .setImage(catUrl)
+        .setTimestamp();
+      
+      await interaction.reply({ embeds: [embed] });
+    } catch (error) {
+      await interaction.reply('Failed to fetch a cat picture 😿');
+    }
+  }
+
+  if (commandName === 'join') {
+    if (!interaction.member.voice.channel) {
+      return interaction.reply('You need to be in a voice channel first!');
+    }
+
+    joinVoiceChannel({
+      channelId: interaction.member.voice.channel.id,
+      guildId: interaction.guild.id,
+      adapterCreator: interaction.guild.voiceAdapterCreator,
+    });
+
+    await interaction.reply('Joined your voice channel! 🎵');
+  }
+
+  if (commandName === 'leave') {
+    const connection = joinVoiceChannel({
+      channelId: interaction.member.voice.channel?.id,
+      guildId: interaction.guild.id,
+      adapterCreator: interaction.guild.voiceAdapterCreator,
+    });
+    
+    if (connection) {
+      connection.destroy();
+      await interaction.reply('Left the voice channel! 👋');
+    }
+  }
+
+  if (commandName === 'tts') {
+    const cooldownTime = 5000;
+    if (cooldowns.has(interaction.user.id)) {
+      const expirationTime = cooldowns.get(interaction.user.id) + cooldownTime;
+      if (Date.now() < expirationTime) {
+        const timeLeft = (expirationTime - Date.now()) / 1000;
+        return interaction.reply(`⏳ Please wait ${timeLeft.toFixed(1)} seconds!`);
+      }
+    }
+    
+    if (!interaction.member.voice.channel) {
+      return interaction.reply('You need to be in a voice channel!');
+    }
+
+    const text = interaction.options.getString('text');
+    cooldowns.set(interaction.user.id, Date.now());
+
+    const fileName = `tts-${Date.now()}.mp3`;
+    const filePath = path.join(__dirname, fileName);
+
+    gtts.save(filePath, text, (err) => {
+      if (err) {
+        return interaction.reply('Error generating TTS 😢');
+      }
+
+      const connection = joinVoiceChannel({
+        channelId: interaction.member.voice.channel.id,
+        guildId: interaction.guild.id,
+        adapterCreator: interaction.guild.voiceAdapterCreator,
+      });
+
+      const player = createAudioPlayer();
+      const resource = createAudioResource(filePath);
+
+      player.play(resource);
+      connection.subscribe(player);
+
+      interaction.reply(`🔊 Playing: "${text}"`);
+
+      player.on('stateChange', (oldState, newState) => {
+        if (newState.status === 'idle') {
+          fs.unlinkSync(filePath);
+        }
+      });
+    });
+  }
+
+  if (commandName === 'say') {
+    if (!interaction.member.permissions.has('Administrator')) {
+      return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
+    }
+    
+    const text = interaction.options.getString('message');
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.channel.send(text);
+    await interaction.editReply('✅ Message sent!');
+  }
+
+  if (commandName === 'embed') {
+    if (!interaction.member.permissions.has('Administrator')) {
+      return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
+    }
+    
+    const text = interaction.options.getString('text');
+    const imageUrl = interaction.options.getString('image');
+    const colorHex = interaction.options.getString('color') || '#0099ff';
+    
+    const colorInt = parseInt(colorHex.replace('#', ''), 16);
+    
+    const embed = new EmbedBuilder()
+      .setColor(colorInt)
+      .setDescription(text)
+      .setTimestamp();
+    
+    if (imageUrl) {
+      embed.setImage(imageUrl);
+    }
+    
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.channel.send({ embeds: [embed] });
+    await interaction.editReply('✅ Embed sent!');
+  }
+
+  if (commandName === 'checkvideos') {
+    if (!interaction.member.permissions.has('ManageGuild')) {
+      return interaction.reply({ content: '❌ You need Manage Server permissions!', ephemeral: true });
+    }
+    await interaction.reply('Checking for new PippyOC videos... 🔍');
+    await checkForNewVideos();
+  }
+
+  if (commandName === 'help') {
+    const embed = new EmbedBuilder()
+      .setColor(0x9B59B6)
+      .setTitle('📋 Bot Commands')
+      .setDescription('All commands are available via slash commands! Just type `/` to see them.')
+      .addFields(
+        { name: '🎤 Voice', value: '`/join` `/leave` `/tts`' },
+        { name: 'ℹ️ Info', value: '`/serverinfo` `/userinfo` `/ping`' },
+        { name: '🎮 Fun', value: '`/roll` `/flip` `/8ball` `/kitty`' },
+        { name: '👑 Admin', value: '`/say` `/embed`' },
+        { name: '📺 YouTube', value: '`/checkvideos`' }
+      )
+      .setFooter({ text: 'Type / to see all commands! Or mention @Tooly' });
+
+    await interaction.reply({ embeds: [embed] });
+  }
+});
+
 client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
-  
-  // Ignore DMs - only respond in servers
-  if (!message.guild) return;
+  if (message.author.bot || !message.guild) return;
 
-  // Check if bot is mentioned
   const botMention = `<@${client.user.id}>`;
   const isMentioned = message.content.startsWith(botMention);
   
-  // Handle mention-based commands
   if (isMentioned) {
     const args = message.content.slice(botMention.length).trim().split(/ +/);
     const command = args[0]?.toLowerCase();
@@ -110,8 +343,7 @@ client.on('messageCreate', async (message) => {
     if (command === '8ball') {
       const responses = [
         'Yes, definitely!', 'No way!', 'Maybe...', 'Ask again later',
-        'Absolutely!', 'I doubt it', 'Signs point to yes', 'Very doubtful',
-        'Without a doubt', 'My sources say no', 'Outlook good', 'Cannot predict now'
+        'Absolutely!', 'I doubt it', 'Signs point to yes', 'Very doubtful'
       ];
       const answer = responses[Math.floor(Math.random() * responses.length)];
       return message.reply(`🎱 ${answer}`);
@@ -124,267 +356,26 @@ client.on('messageCreate', async (message) => {
     
     if (command === 'flip') {
       const result = Math.random() < 0.5 ? 'Heads' : 'Tails';
-      return message.reply(`🪙 The coin landed on **${result}**!`);
+      return message.reply(`🪙 ${result}!`);
     }
     
-    if (command === 'help') {
-      return message.reply('Try: `@Tooly 8ball`, `@Tooly roll`, or `@Tooly flip`\nOr use slash commands like `/helpmsg`');
-    }
-    
-    if (!command) {
+    if (command === 'help' || !command) {
       const embed = new EmbedBuilder()
-      .setColor(0x0099ff)
-      .setTitle(message.guild.name)
-      .setThumbnail(message.guild.iconURL())
-      .addFields(
-        { name: '👥 Members', value: `${message.guild.memberCount}`, inline: true },
-        { name: '📅 Created', value: message.guild.createdAt.toDateString(), inline: true },
-        { name: '🆔 Server ID', value: message.guild.id, inline: true }
-      )
-      .setTimestamp();
-
-    message.reply({ embeds: [embed] });
+        .setColor(0x9B59B6)
+        .setTitle('📋 Bot Commands')
+        .setDescription('All commands are available via slash commands! Just type `/` to see them.')
+        .addFields(
+          { name: '🎤 Voice', value: '`/join` `/leave` `/tts`' },
+          { name: 'ℹ️ Info', value: '`/serverinfo` `/userinfo` `/ping`' },
+          { name: '🎮 Fun', value: '`/roll` `/flip` `/8ball` `/kitty`' },
+          { name: '👑 Admin', value: '`/say` `/embed`' },
+          { name: '📺 YouTube', value: '`/checkvideos`' }
+        )
+        .setFooter({ text: 'Type / to see all commands!' });
+      
+      return message.reply({ embeds: [embed] });
     }
-  }
-
-  // ===== BASIC COMMANDS =====
-  if (message.content === '/hello') {
-    message.reply('Hello! 👋');
-  }
-
-  if (message.content === '/ping') {
-    const sent = await message.reply('Pinging...');
-    const ping = sent.createdTimestamp - message.createdTimestamp;
-    sent.edit(`🏓 Pong! Latency: ${ping}ms`);
-  }
-
-  if (message.content === '/itest') {
-    const embed = new EmbedBuilder()
-      .setColor(0x0099ff)
-      .setImage('https://i.ibb.co/BDhQV8B/image.png');
-    
-    message.reply({ content: 'yotsuba', embeds: [embed] });
-  }
-
-  // ===== VOICE COMMANDS =====
-  if (message.content === '/join') {
-    if (!message.member.voice.channel) {
-      return message.reply('You need to be in a voice channel first!');
-    }
-
-    joinVoiceChannel({
-      channelId: message.member.voice.channel.id,
-      guildId: message.guild.id,
-      adapterCreator: message.guild.voiceAdapterCreator,
-    });
-
-    message.reply('Joined your voice channel! 🎵');
-  }
-
-  if (message.content === '/leave') {
-    const connection = joinVoiceChannel({
-      channelId: message.member.voice.channel?.id,
-      guildId: message.guild.id,
-      adapterCreator: message.guild.voiceAdapterCreator,
-    });
-    
-    if (connection) {
-      connection.destroy();
-      message.reply('Left the voice channel! 👋');
-    }
-  }
-
-  if (message.content.startsWith('/tts ')) {
-    // Check cooldown
-    const cooldownTime = 5000; // 5 seconds
-    if (cooldowns.has(message.author.id)) {
-      const expirationTime = cooldowns.get(message.author.id) + cooldownTime;
-      if (Date.now() < expirationTime) {
-        const timeLeft = (expirationTime - Date.now()) / 1000;
-        return message.reply(`⏳ Please wait ${timeLeft.toFixed(1)} seconds before using TTS again!`);
-      }
-    }
-    
-    if (!message.member.voice.channel) {
-      return message.reply('You need to be in a voice channel to use TTS!');
-    }
-
-    const text = message.content.slice(5);
-    cooldowns.set(message.author.id, Date.now());
-    
-    if (!text) {
-      return message.reply('Please provide text! Example: `/tts Hello everyone`');
-    }
-
-    const fileName = `tts-${Date.now()}.mp3`;
-    const filePath = path.join(__dirname, fileName);
-
-    gtts.save(filePath, text, (err) => {
-      if (err) {
-        return message.reply('Error generating TTS 😢');
-      }
-
-      const connection = joinVoiceChannel({
-        channelId: message.member.voice.channel.id,
-        guildId: message.guild.id,
-        adapterCreator: message.guild.voiceAdapterCreator,
-      });
-
-      const player = createAudioPlayer();
-      const resource = createAudioResource(filePath);
-
-      player.play(resource);
-      connection.subscribe(player);
-
-      message.reply(`🔊 Playing: "${text}"`);
-
-      player.on('stateChange', (oldState, newState) => {
-        if (newState.status === 'idle') {
-          fs.unlinkSync(filePath);
-        }
-      });
-    });
-  }
-
-  // ===== INFO COMMANDS =====
-  if (message.content === '/serverinfo') {
-    const embed = new EmbedBuilder()
-      .setColor(0x0099ff)
-      .setTitle(message.guild.name)
-      .setThumbnail(message.guild.iconURL())
-      .addFields(
-        { name: '👥 Members', value: `${message.guild.memberCount}`, inline: true },
-        { name: '📅 Created', value: message.guild.createdAt.toDateString(), inline: true },
-        { name: '🆔 Server ID', value: message.guild.id, inline: true }
-      )
-      .setTimestamp();
-
-    message.reply({ embeds: [embed] });
-  }
-
-  if (message.content === '/userinfo') {
-    const user = message.author;
-    const embed = new EmbedBuilder()
-      .setColor(0x00ff00)
-      .setTitle('User Information')
-      .setThumbnail(user.displayAvatarURL())
-      .addFields(
-        { name: '👤 Username', value: user.username, inline: true },
-        { name: '🆔 User ID', value: user.id, inline: true },
-        { name: '📅 Account Created', value: user.createdAt.toDateString(), inline: false }
-      );
-
-    message.reply({ embeds: [embed] });
-  }
-
-  // ===== FUN COMMANDS =====
-  if (message.content === '/roll') {
-    const roll = Math.floor(Math.random() * 6) + 1;
-    message.reply(`🎲 You rolled a **${roll}**!`);
-  }
-
-  if (message.content === '/flip') {
-    const result = Math.random() < 0.5 ? 'Heads' : 'Tails';
-    message.reply(`🪙 The coin landed on **${result}**!`);
-  }
-
-  if (message.content === '/8ball') {
-    const responses = [
-      'Yes, definitely!', 'No way!', 'Maybe...', 'Ask again later',
-      'Absolutely!', 'I doubt it', 'Signs point to yes', 'Very doubtful'
-    ];
-    const answer = responses[Math.floor(Math.random() * responses.length)];
-    message.reply(`🎱 ${answer}`);
-  }
-
-  // ===== ADMIN COMMANDS =====
-  if (message.content.startsWith('/say ')) {
-    if (!message.member.permissions.has('Administrator')) {
-      return message.reply('❌ You need administrator permissions to use this!');
-    }
-    
-    const text = message.content.slice(5);
-    
-    if (!text) {
-      return message.reply('Please provide a message! Example: `/say Hello everyone!`');
-    }
-    
-    await message.delete();
-    message.channel.send(text);
-  }
-
-  if (message.content.startsWith('/sayto ')) {
-    if (!message.member.permissions.has('Administrator')) {
-      return message.reply('❌ You need administrator permissions to use this!');
-    }
-    
-    const args = message.content.slice(7).split(' ');
-    const channelId = args[0];
-    const text = args.slice(1).join(' ');
-    
-    if (!channelId || !text) {
-      return message.reply('Usage: `/sayto [channel-id] [message]`\nExample: `/sayto 123456789 Hello!`');
-    }
-    
-    const targetChannel = client.channels.cache.get(channelId);
-    
-    if (!targetChannel) {
-      return message.reply('❌ Channel not found!');
-    }
-    
-    await message.delete();
-    targetChannel.send(text);
-    message.author.send(`✅ Message sent to ${targetChannel.name}`).catch(() => {});
-  }
-
-  if (message.content.startsWith('/embed ')) {
-    if (!message.member.permissions.has('Administrator')) {
-      return message.reply('❌ You need administrator permissions to use this!');
-    }
-    
-    const text = message.content.slice(7);
-    
-    if (!text) {
-      return message.reply('Please provide a message! Example: `/embed Cool announcement!`');
-    }
-    
-    const embed = new EmbedBuilder()
-      .setColor(0x0099ff)
-      .setDescription(text)
-      .setTimestamp();
-    
-    await message.delete();
-    message.channel.send({ embeds: [embed] });
-  }
-
-  // ===== YOUTUBE COMMANDS =====
-  if (message.content === '/checkvideos') {
-    if (!message.member.permissions.has('ManageGuild')) {
-      return message.reply('❌ You need Manage Server permissions to use this!');
-    }
-    message.reply('Checking for new PippyOC videos... 🔍');
-    await checkForNewVideos();
-  }
-
-  // ===== HELP COMMAND =====
-  if (message.content === '/helpmsg') {
-    const embed = new EmbedBuilder()
-      .setColor(0x9B59B6)
-      .setTitle('📋 Bot Commands')
-      .setDescription('Here are all available commands:')
-      .addFields(
-        { name: '🎤 Voice Commands', value: '`/join` - Join voice channel\n`/leave` - Leave voice channel\n`/tts <text>` - Text-to-speech' },
-        { name: 'ℹ️ Info Commands', value: '`/serverinfo` - Server details\n`/userinfo` - Your user info\n`/ping` - Check latency' },
-        { name: '🎮 Fun Commands', value: '`/roll` - Roll a dice\n`/flip` - Flip a coin\n`/8ball` - Ask the magic 8-ball' },
-        { name: '📺 YouTube Commands', value: '`/checkvideos` - Manually check for new videos' },
-        { name: '👑 Admin Commands', value: '`/say <text>` - Bot says something\n`/sayto <channel-id> <text>` - Send to specific channel\n`/embed <text>` - Send as embed' },
-        { name: '⚙️ Other', value: '`/hello` - Say hello\n`/helpmsg` - Show this message\n`@Tooly 8ball` - Mention commands' }
-      )
-      .setFooter({ text: 'Use / before each command' });
-
-    message.reply({ embeds: [embed] });
   }
 });
 
-// Login
 client.login(process.env.TOKEN);
