@@ -56,14 +56,6 @@ const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 const NOTIFICATION_CHANNEL_ID = process.env.NOTIFICATION_CHANNEL_ID;
 const cooldowns = new Map();
 
-client.user.setPresence({
-  activities: [{
-    name: 'Being tooly',
-    type: 0 
-  }],
-  status: 'online'
-});
-
 
 const commands = [
   new SlashCommandBuilder().setName('hello').setDescription('Say hello'),
