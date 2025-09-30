@@ -243,7 +243,7 @@ client.on('messageCreate', async (message) => {
   }
 
   // ===== HELP COMMAND =====
-  if (message.content === '/help') {
+  if (message.content === '/helpmsg') {
     const embed = new EmbedBuilder()
       .setColor(0x9B59B6)
       .setTitle('📋 Bot Commands')
@@ -253,7 +253,7 @@ client.on('messageCreate', async (message) => {
         { name: 'ℹ️ Info Commands', value: '`/serverinfo` - Server details\n`!userinfo` - Your user info\n`/ping` - Check latency' },
         { name: '🎮 Fun Commands', value: '`/roll` - Roll a dice\n`!flip` - Flip a coin\n`/8ball` - Ask the magic 8-ball' },
         { name: '📺 YouTube Commands', value: '`/checkvideos` - Manually check for new videos' },
-        { name: '⚙️ Other', value: '`/hello` - Say hello\n`/help` - Show this message' }
+        { name: '⚙️ Other', value: '`/hello` - Say hello\n`/helpmsg` - Show this message' }
       )
       .setFooter({ text: 'Use / before each command' });
 
