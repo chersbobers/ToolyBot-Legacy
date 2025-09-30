@@ -131,9 +131,19 @@ client.on('messageCreate', async (message) => {
       return message.reply('Try: `@Tooly 8ball`, `@Tooly roll`, or `@Tooly flip`\nOr use slash commands like `/helpmsg`');
     }
     
-    // If mentioned but no valid command
     if (!command) {
-      return message.reply('Hi! Try `@Tooly help` to see what I can do! 👋');
+      const embed = new EmbedBuilder()
+      .setColor(0x0099ff)
+      .setTitle(message.guild.name)
+      .setThumbnail(message.guild.iconURL())
+      .addFields(
+        { name: '👥 Members', value: `${message.guild.memberCount}`, inline: true },
+        { name: '📅 Created', value: message.guild.createdAt.toDateString(), inline: true },
+        { name: '🆔 Server ID', value: message.guild.id, inline: true }
+      )
+      .setTimestamp();
+
+    message.reply({ embeds: [embed] });
     }
   }
 
