@@ -34,9 +34,8 @@ const parser = new Parser();
 let lastVideoId = '';
 
 // YouTube channel ID for PippyOC - UPDATE THIS WITH THE ACTUAL CHANNEL ID
-const YOUTUBE_CHANNEL_ID = 'UCLDKWUO9mwlcvvcm6ezK9AQ';
-const NOTIFICATION_CHANNEL_ID = '1374822032579231745'; // Where to post notifications
-
+const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
+const NOTIFICATION_CHANNEL_ID = process.env.NOTIFICATION_CHANNEL_ID;
 // Check for new videos every 5 minutes
 async function checkForNewVideos() {
   try {
@@ -93,18 +92,25 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   // ===== BASIC COMMANDS =====
-  if (message.content === '!hello') {
+  if (message.content === '/hello') {
     message.reply('Hello! 👋');
   }
 
-  if (message.content === '!ping') {
+  if (message.content === '/ping') {
     const sent = await message.reply('Pinging...');
     const ping = sent.createdTimestamp - message.createdTimestamp;
     sent.edit(`🏓 Pong! Latency: ${ping}ms`);
   }
 
+  if (message.content === '/itest') {
+  const embed = new EmbedBuilder()
+    .setColor(0x0099ff)
+    .setImage('https://i.ibb.co/BDhQV8B/image.png');
+  
+  message.reply({ content: 'yotsuba', embeds: [embed] });
+}
   // ===== VOICE COMMANDS =====
-  if (message.content === '!join') {
+  if (message.content === '/join') {
     if (!message.member.voice.channel) {
       return message.reply('You need to be in a voice channel first!');
     }
@@ -118,7 +124,7 @@ client.on('messageCreate', async (message) => {
     message.reply('Joined your voice channel! 🎵');
   }
 
-  if (message.content === '!leave') {
+  if (message.content === '/leave') {
     const connection = joinVoiceChannel({
       channelId: message.member.voice.channel?.id,
       guildId: message.guild.id,
@@ -131,7 +137,7 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  if (message.content.startsWith('!tts ')) {
+  if (message.content.startsWith('/tts ')) {
     if (!message.member.voice.channel) {
       return message.reply('You need to be in a voice channel to use TTS!');
     }
@@ -173,7 +179,7 @@ client.on('messageCreate', async (message) => {
   }
 
   // ===== INFO COMMANDS =====
-  if (message.content === '!serverinfo') {
+  if (message.content === '/serverinfo') {
     const embed = new EmbedBuilder()
       .setColor(0x0099ff)
       .setTitle(message.guild.name)
@@ -188,7 +194,7 @@ client.on('messageCreate', async (message) => {
     message.reply({ embeds: [embed] });
   }
 
-  if (message.content === '!userinfo') {
+  if (message.content === '/userinfo') {
     const user = message.author;
     const embed = new EmbedBuilder()
       .setColor(0x00ff00)
@@ -204,17 +210,17 @@ client.on('messageCreate', async (message) => {
   }
 
   // ===== FUN COMMANDS =====
-  if (message.content === '!roll') {
+  if (message.content === '/roll') {
     const roll = Math.floor(Math.random() * 6) + 1;
     message.reply(`🎲 You rolled a **${roll}**!`);
   }
 
-  if (message.content === '!flip') {
+  if (message.content === '/flip') {
     const result = Math.random() < 0.5 ? 'Heads' : 'Tails';
     message.reply(`🪙 The coin landed on **${result}**!`);
   }
 
-  if (message.content === '!8ball') {
+  if (message.content === '/8ball') {
     const responses = [
       'Yes, definitely!', 'No way!', 'Maybe...', 'Ask again later',
       'Absolutely!', 'I doubt it', 'Signs point to yes', 'Very doubtful'
@@ -224,12 +230,12 @@ client.on('messageCreate', async (message) => {
   }
 
   // ===== YOUTUBE COMMANDS =====
-  if (message.content === '!checkvideos') {
+  if (message.content === '/checkvideos') {
     message.reply('Checking for new PippyOC videos... 🔍');
     await checkForNewVideos();
   }
 
-  if (message.content === '!setchannel') {
+  if (message.content === '/setchannel') {
     if (!message.member.permissions.has('Administrator')) {
       return message.reply('You need administrator permissions to use this command!');
     }
@@ -237,19 +243,19 @@ client.on('messageCreate', async (message) => {
   }
 
   // ===== HELP COMMAND =====
-  if (message.content === '!help') {
+  if (message.content === '/help') {
     const embed = new EmbedBuilder()
       .setColor(0x9B59B6)
       .setTitle('📋 Bot Commands')
       .setDescription('Here are all available commands:')
       .addFields(
-        { name: '🎤 Voice Commands', value: '`!join` - Join voice channel\n`!leave` - Leave voice channel\n`!tts <text>` - Text-to-speech' },
-        { name: 'ℹ️ Info Commands', value: '`!serverinfo` - Server details\n`!userinfo` - Your user info\n`!ping` - Check latency' },
-        { name: '🎮 Fun Commands', value: '`!roll` - Roll a dice\n`!flip` - Flip a coin\n`!8ball` - Ask the magic 8-ball' },
-        { name: '📺 YouTube Commands', value: '`!checkvideos` - Manually check for new videos' },
-        { name: '⚙️ Other', value: '`!hello` - Say hello\n`!help` - Show this message' }
+        { name: '🎤 Voice Commands', value: '`/join` - Join voice channel\n`/leave` - Leave voice channel\n`/tts <text>` - Text-to-speech' },
+        { name: 'ℹ️ Info Commands', value: '`/serverinfo` - Server details\n`!userinfo` - Your user info\n`/ping` - Check latency' },
+        { name: '🎮 Fun Commands', value: '`/roll` - Roll a dice\n`!flip` - Flip a coin\n`/8ball` - Ask the magic 8-ball' },
+        { name: '📺 YouTube Commands', value: '`/checkvideos` - Manually check for new videos' },
+        { name: '⚙️ Other', value: '`/hello` - Say hello\n`/help` - Show this message' }
       )
-      .setFooter({ text: 'Use ! before each command' });
+      .setFooter({ text: 'Use / before each command' });
 
     message.reply({ embeds: [embed] });
   }
