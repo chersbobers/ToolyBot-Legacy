@@ -386,8 +386,11 @@ async def random_pet(interaction: discord.Interaction):
 @bot.tree.command(name='ranobby', description='Get a random ObbyCreator code from r/ObbyCreator')
 async def ranobby(interaction: discord.Interaction):
     await interaction.response.defer()
-    url = "https://www.reddit.com/r/ObbyCreator/new.json?limit=200"
-    headers = {"User-Agent": "ToolyBot/1.0"}
+    url = "https://www.reddit.com/r/ObbyCreator/new.json?limit=50"
+    # Use a browser-like User-Agent
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; ToolyBot/1.0; +https://github.com/yourusername/ToolyBot)"
+    }
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
