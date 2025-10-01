@@ -285,43 +285,7 @@ async def check_videos():
             bot_data.save()
     except Exception as e:
         logger.error(f'Error checking videos: {e}')
-@bot.tree.command(name='subs', description='Check YouTube subscriber count for a channel')
-@app_commands.describe(channel_id='YouTube channel ID (leave blank for default)')
-async def subs(interaction: discord.Interaction, channel_id: Optional[str] = None):
-    await interaction.response.defer()
-    api_key = os.getenv('YOUTUBE_API_KEY')
-    default_channel_id = os.getenv('YOUTUBE_CHANNEL_ID')
-    # Use provided channel_id or default from env
-    channel_id = channel_id or default_channel_id
-    if not api_key:
-        await interaction.followup.send('❌ YOUTUBE_API_KEY not set in environment.', ephemeral=True)
-        return
-    if not channel_id:
-        await interaction.followup.send('❌ No channel ID provided and YOUTUBE_CHANNEL_ID not set.', ephemeral=True)
-        return
-    url = f'https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id={channel_id}&key={api_key}'
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status != 200:
-                    await interaction.followup.send(f'❌ YouTube API error: {resp.status}', ephemeral=True)
-                    return
-                data = await resp.json()
-                if not data.get('items'):
-                    await interaction.followup.send('❌ Channel not found.', ephemeral=True)
-                    return
-                info = data['items'][0]
-                subs = info['statistics'].get('subscriberCount', 'N/A')
-                title = info['snippet'].get('title', 'Unknown Channel')
-                embed = discord.Embed(
-                    title=f'📺 {title}',
-                    description=f'**Subscribers:** {subs}',
-                    color=0xFF0000,
-                    timestamp=datetime.utcnow()
-                )
-                await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send(f'❌ Failed to fetch subscriber count: {e}', ephemeral=True)
+
 # ============ INFO COMMANDS ============
 @bot.tree.command(name='ping', description='Check bot latency')
 async def ping(interaction: discord.Interaction):
@@ -417,36 +381,6 @@ async def random_pet(interaction: discord.Interaction):
                     await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send('Failed to fetch a pet picture 😥')
-
-
-@bot.tree.command(name='ranobby', description='Get a random ObbyCreator code from r/ObbyCreator')
-async def ranobby(interaction: discord.Interaction):
-    await interaction.response.defer()
-    url = "https://www.reddit.com/r/ObbyCreator/new.json?limit=50"
-    # Use a browser-like User-Agent
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; ToolyBot/1.0; +https://github.com/yourusername/ToolyBot)"
-    }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status != 200:
-                    await interaction.followup.send(f"❌ Reddit API error: {resp.status}", ephemeral=True)
-                    return
-                data = await resp.json()
-                codes = []
-                for post in data["data"]["children"]:
-                    text = post["data"].get("selftext", "") + " " + post["data"].get("title", "")
-                    found = re.findall(r"\b\d{9,12}#\d+\b", text)
-                    codes.extend(found)
-                if not codes:
-                    await interaction.followup.send("❌ No codes found in recent posts.", ephemeral=True)
-                    return
-                code = random.choice(codes)
-                await interaction.followup.send(f"🎲 Random ObbyCreator code from r/ObbyCreator:\n`{code}`")
-    except Exception as e:
-        await interaction.followup.send(f"❌ Failed to fetch codes: {e}", ephemeral=True)
-
 
 @bot.tree.command(name='joke', description='Get a random joke')
 async def joke(interaction: discord.Interaction):
