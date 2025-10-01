@@ -612,61 +612,15 @@ async def say(interaction: discord.Interaction, message: str):
 @app_commands.describe(text='Embed text', image='Image URL', color='Hex color (e.g., #FF0000)')
 @app_commands.default_permissions(administrator=True)
 async def embed_cmd(interaction: discord.Interaction, text: str, image: Optional[str] = None, color: Optional[str] = '#9B59B6'):
-    if not re.match(r'^#[0-9A-F]{6}
-    color_int = int(color.replace('#', ''), 16)
-    embed = discord.Embed(description=text[:4096], color=color_int, timestamp=datetime.utcnow())
-    if image:
-        if not re.match(r'^https?://.+\.(jpg|jpeg|png|gif|webp), image, re.IGNORECASE):
-            await interaction.response.send_message('❌ Invalid image URL!', ephemeral=True)
-            return
-        embed.set_image(url=image)
-    await interaction.response.defer(ephemeral=True)
-    await interaction.channel.send(embed=embed)
-    await interaction.followup.send('✅ Embed sent!', ephemeral=True)
-
-@bot.tree.command(name='dm', description='Send a DM to a user')
-@app_commands.describe(user='User to message', message='Message content')
-@app_commands.default_permissions(moderate_members=True)
-async def dm(interaction: discord.Interaction, user: discord.Member, message: str):
-    try:
-        await user.send(f'📬 **Message from {interaction.guild.name} Mod Team:**\n\n{message[:2000]}')
-        await interaction.response.send_message(f'✅ Message sent to {user.mention}', ephemeral=True)
-    except:
-        await interaction.response.send_message('❌ Could not send DM. The user may have DMs off.', ephemeral=True)
-
-# ============ YOUTUBE COMMANDS ============
-@bot.tree.command(name='checkvideos', description='Check for new PippyOC videos')
-@app_commands.default_permissions(manage_guild=True)
-async def checkvideos(interaction: discord.Interaction):
-    await interaction.response.send_message('Checking for new PippyOC videos... 🔍')
-    await check_videos()
-
-# ============ HELP COMMAND ============
-@bot.tree.command(name='help', description='Show all commands')
-async def help_command(interaction: discord.Interaction):
-    embed = discord.Embed(title='📋 Tooly Bot Commands', description='Here are all my commands organized by category!', color=0x9B59B6, timestamp=datetime.utcnow())
-    embed.add_field(name='ℹ️ Info', value='`/hello` `/ping` `/serverinfo` `/userinfo` `/help`', inline=False)
-    embed.add_field(name='🎮 Fun', value='`/roll` `/flip` `/8ball` `/kitty` `/joke` `/yotsuba`', inline=False)
-    embed.add_field(name='📊 Levels', value='`/rank` `/leaderboard`\nEarn XP by chatting! (1 msg/min)', inline=False)
-    embed.add_field(name='💰 Economy', value='`/balance` `/daily` `/work` `/deposit` `/withdraw` `/give`', inline=False)
-    embed.add_field(name='🛡️ Moderation', value='`/warn` `/warnings` `/kick` `/ban` `/timeout` `/purge`', inline=False)
-    embed.add_field(name='👑 Admin', value='`/say` `/embed` `/dm`', inline=False)
-    embed.add_field(name='📺 YouTube', value='`/checkvideos` - Check for new PippyOC videos', inline=False)
-    embed.set_footer(text='Type / to see all commands!')
-    await interaction.response.send_message(embed=embed)
-
-if __name__ == '__main__':
-    token = os.getenv('TOKEN')
-    if not token:
-        logger.error('❌ TOKEN environment variable not set!')
-        exit(1)
-    bot.run(token), color, re.IGNORECASE):
+    # Fix hex color validation
+    if not re.match(r'^#[0-9A-Fa-f]{6}$', color):
         await interaction.response.send_message('❌ Invalid hex color!', ephemeral=True)
         return
     color_int = int(color.replace('#', ''), 16)
     embed = discord.Embed(description=text[:4096], color=color_int, timestamp=datetime.utcnow())
     if image:
-        if not re.match(r'^https?://.+\.(jpg|jpeg|png|gif|webp), image, re.IGNORECASE):
+        # Fix image URL validation
+        if not re.match(r'^https?://.+\.(jpg|jpeg|png|gif|webp)$', image, re.IGNORECASE):
             await interaction.response.send_message('❌ Invalid image URL!', ephemeral=True)
             return
         embed.set_image(url=image)
