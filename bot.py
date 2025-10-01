@@ -633,7 +633,7 @@ async def embed_cmd(interaction: discord.Interaction, text: str, image: Optional
 @app_commands.default_permissions(moderate_members=True)
 async def dm(interaction: discord.Interaction, user: discord.Member, message: str):
     try:
-        await user.send(f'📬 **Message from {interaction.guild.name} Mod Team:**\n\n{message[:2000]}')
+        await user.send(f'📬 **Message from tooly**\n\n{message[:2000]}')
         await interaction.response.send_message(f'✅ Message sent to {user.mention}', ephemeral=True)
     except:
         await interaction.response.send_message('❌ Could not send DM. The user may have DMs off.', ephemeral=True)
