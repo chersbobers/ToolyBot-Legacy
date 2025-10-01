@@ -11,6 +11,7 @@ import re
 from typing import Optional
 import logging
 import random
+from duckduckgo_search import DDGS
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -349,6 +350,7 @@ async def kitty(interaction: discord.Interaction):
                 await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send('Failed to fetch a cat picture 😿')
+
 @bot.tree.command(name='doggy', description='Get a random dog picture')
 async def Doggy(interaction: discord.Interaction):
     await interaction.response.defer()
@@ -361,6 +363,7 @@ async def Doggy(interaction: discord.Interaction):
                 await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send('Failed to fetch a dog picture 😥')
+
 @bot.tree.command(name='randompet', description='Get a random pet picture')
 async def random_pet(interaction: discord.Interaction):
     await interaction.response.defer()
@@ -381,6 +384,28 @@ async def random_pet(interaction: discord.Interaction):
                     await interaction.followup.send(embed=embed)
     except:
         await interaction.followup.send('Failed to fetch a pet picture 😥')
+
+@bot.tree.command(name='image', description='Search for an image')
+@app_commands.describe(query='What to search for')
+async def image(interaction: discord.Interaction, query: str):
+    await interaction.response.defer()
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.images(query, max_results=1))
+            
+            if results:
+                embed = discord.Embed(
+                    title=f'🔍 {query}', 
+                    color=0xFF69B4, 
+                    timestamp=datetime.utcnow()
+                )
+                embed.set_image(url=results[0]['image'])
+                embed.set_footer(text=f'Requested by {interaction.user.name}')
+                await interaction.followup.send(embed=embed)
+            else:
+                await interaction.followup.send('No images found 😥')
+    except:
+        await interaction.followup.send('Failed to search for images 😥')
 
 @bot.tree.command(name='joke', description='Get a random joke')
 async def joke(interaction: discord.Interaction):
