@@ -859,8 +859,6 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Move this block OUTSIDE of the interactionCreate handler!
-// It should NOT be inside the interactionCreate event.
 client.on('messageCreate', async (message) => {
   // Only handle DMs once and avoid double sending
   if (message.channel.type === 1 && !message.author.bot) { // type 1 = DM
@@ -1072,36 +1070,6 @@ client.on('messageCreate', async (message) => {
       
       return message.reply({ embeds: [embed] });
     }
-  }
-
-  // DM relay logic
-  if (message.channel.type === 1 && !message.author.bot) { // type 1 = DM
-    // Relay DM to log channel
-    if (DM_LOG_CHANNEL_ID) {
-      const logChannel = client.channels.cache.get(DM_LOG_CHANNEL_ID);
-      if (logChannel) {
-        const embed = new EmbedBuilder()
-          .setColor(0x3498DB)
-          .setTitle('📩 New DM Received')
-          .setDescription(message.content)
-          .setFooter({ text: `From: ${message.author.tag} (${message.author.id})` })
-          .setTimestamp();
-        await logChannel.send({ embeds: [embed] });
-      }
-    }
-
-    // Basic AI reply (Mee6 style)
-    const content = message.content.toLowerCase();
-    if (content.includes('hi tooly') || content.includes('hello tooly')) {
-      await message.reply('Hi! 👋');
-    } else if (content.includes('how are you')) {
-      await message.reply('I\'m just a bot, but I\'m doing great! 😊');
-    } else if (content.includes('help')) {
-      await message.reply('Need help? Type `/help` in a server for my commands!');
-    }
-    // Add more simple triggers here if you want
-
-    return;
   }
 });
 
