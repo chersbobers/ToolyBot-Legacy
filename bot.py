@@ -490,22 +490,33 @@ async def random_pet(interaction: discord.Interaction):
 async def image(interaction: discord.Interaction, query: str):
     await interaction.response.defer()
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.images(query, max_results=1))
-            
-            if results:
-                embed = discord.Embed(
-                    title=f'🔍 {query}', 
-                    color=0xFF69B4, 
-                    timestamp=datetime.utcnow()
-                )
-                embed.set_image(url=results[0]['image'])
-                embed.set_footer(text=f'Requested by {interaction.user.name}')
-                await interaction.followup.send(embed=embed)
-            else:
-                await interaction.followup.send('No images found 😥')
-    except:
-        await interaction.followup.send('Failed to search for images 😥')
+        # Add timeout and better error handling
+        from duckduckgo_search import DDGS
+        
+        ddgs = DDGS()
+        results = ddgs.images(
+            keywords=query,
+            region="wt-wt",
+            safesearch="moderate",
+            max_results=1
+        )
+        
+        results_list = list(results)
+        
+        if results_list:
+            embed = discord.Embed(
+                title=f'🔍 {query}', 
+                color=0xFF69B4, 
+                timestamp=datetime.utcnow()
+            )
+            embed.set_image(url=results_list[0]['image'])
+            embed.set_footer(text=f'Requested by {interaction.user.name}')
+            await interaction.followup.send(embed=embed)
+        else:
+            await interaction.followup.send('No images found 😥')
+    except Exception as e:
+        logger.error(f'Image search error: {e}')
+        await interaction.followup.send(f'Failed to search for images 😥\nTry again in a moment.')
 
 @bot.tree.command(name='joke', description='Get a random joke')
 async def joke(interaction: discord.Interaction):
