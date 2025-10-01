@@ -382,6 +382,33 @@ async def random_pet(interaction: discord.Interaction):
     except:
         await interaction.followup.send('Failed to fetch a pet picture 😥')
 
+
+@bot.tree.command(name='ranobby', description='Get a random ObbyCreator code from r/ObbyCreator')
+async def ranobby(interaction: discord.Interaction):
+    await interaction.response.defer()
+    url = "https://www.reddit.com/r/ObbyCreator/new.json?limit=200"
+    headers = {"User-Agent": "ToolyBot/1.0"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status != 200:
+                    await interaction.followup.send(f"❌ Reddit API error: {resp.status}", ephemeral=True)
+                    return
+                data = await resp.json()
+                codes = []
+                for post in data["data"]["children"]:
+                    text = post["data"].get("selftext", "") + " " + post["data"].get("title", "")
+                    found = re.findall(r"\b\d{9,12}#\d+\b", text)
+                    codes.extend(found)
+                if not codes:
+                    await interaction.followup.send("❌ No codes found in recent posts.", ephemeral=True)
+                    return
+                code = random.choice(codes)
+                await interaction.followup.send(f"🎲 Random ObbyCreator code from r/ObbyCreator:\n`{code}`")
+    except Exception as e:
+        await interaction.followup.send(f"❌ Failed to fetch codes: {e}", ephemeral=True)
+
+
 @bot.tree.command(name='joke', description='Get a random joke')
 async def joke(interaction: discord.Interaction):
     await interaction.response.defer()
@@ -691,40 +718,9 @@ async def help_command(interaction: discord.Interaction):
     embed.set_footer(text='Type / to see all commands!')
     await interaction.response.send_message(embed=embed)
 
-import aiohttp
-
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")  # Put your key in .env
-
-@bot.tree.command(name='ai', description='Ask Deepseek AI (OpenRouter)')
-@app_commands.describe(prompt='Your question or prompt for the AI')
-async def ai(interaction: discord.Interaction, prompt: str):
-    await interaction.response.defer()
-    if not OPENROUTER_API_KEY:
-        await interaction.followup.send("❌ OpenRouter API key not set.", ephemeral=True)
-        return
-
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "deepseek/deepseek-chat-v3.1:free",
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
-    }
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    await interaction.followup.send(f"❌ API error: {resp.status}\n{text}", ephemeral=True)
-                    return
-                data = await resp.json()
-                # Deepseek/OpenRouter returns choices[0].message.content
-                answer = data.get("choices", [{}])[0].get("message", {}).get("content", "No response.")
-                await interaction.followup.send(answer)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Failed to contact AI: {e}", ephemeral=True)
+if __name__ == '__main__':
+    token = os.getenv('TOKEN')
+    if not token:
+        logger.error('❌ TOKEN environment variable not set!')
+        exit(1)
+    bot.run(token)
