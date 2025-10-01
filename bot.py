@@ -37,6 +37,7 @@ class Config:
     DATA_FILE = 'botdata.json'
     AUTOSAVE_INTERVAL = 300
     VIDEO_CHECK_INTERVAL = 300
+    SETTINGS_FILE = 'server_settings.json'
 
 class BotData:
     def __init__(self):
@@ -85,6 +86,16 @@ class BotData:
         if user_id not in self.data['warnings']:
             self.data['warnings'][user_id] = []
         self.data['warnings'][user_id].append(warning)
+def load_server_settings():
+    if os.path.exists(Config.SETTINGS_FILE):
+        with open(Config.SETTINGS_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_server_settings(settings):
+    with open(Config.SETTINGS_FILE, 'w') as f:
+        json.dump(settings, f, indent=2)
+
 
 class AutoMod:
     @staticmethod
@@ -118,6 +129,7 @@ intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 bot_data = BotData()
+server_settings = load_server_settings()
 name_mention_cooldowns = {}
 
 # Web server
@@ -276,6 +288,14 @@ async def check_videos():
             if video_id != bot_data.data['lastVideoId'] and bot_data.data['lastVideoId']:
                 channel = bot.get_channel(int(notif_channel_id))
                 if channel:
+                    # CHECK IF NOTIFICATIONS ARE ENABLED FOR THIS SERVER
+                    guild_id = str(channel.guild.id)
+                    if not server_settings.get(guild_id, {}).get('notifications_enabled', True):
+                        logger.info(f'Notifications disabled for guild {guild_id}')
+                        bot_data.data['lastVideoId'] = video_id
+                        bot_data.save()
+                        return
+                    
                     embed = discord.Embed(title='🎬 New PippyOC Video!', description=f'**{latest.title}**', url=latest.link, color=0xFF0000, timestamp=datetime.utcnow())
                     if hasattr(latest, 'media_thumbnail'):
                         embed.set_thumbnail(url=latest.media_thumbnail[0]['url'])
@@ -332,11 +352,53 @@ async def userinfo(interaction: discord.Interaction, user: Optional[discord.Memb
         embed.add_field(name='📥 Joined Server', value=target.joined_at.strftime('%Y-%m-%d'), inline=False)
     await interaction.response.send_message(embed=embed)
 
+#=============TOGGLES=============
+@bot.tree.command(name='toggle-notifications', description='Toggle PippyOC video notifications on/off')
+@app_commands.default_permissions(manage_guild=True)
+async def toggle_notifications(interaction: discord.Interaction):
+    guild_id = str(interaction.guild.id)
+    
+    if guild_id not in server_settings:
+        server_settings[guild_id] = {'notifications_enabled': True}
+    
+    current = server_settings[guild_id].get('notifications_enabled', True)
+    server_settings[guild_id]['notifications_enabled'] = not current
+    
+    save_server_settings(server_settings)
+    
+    status = "enabled ✅" if not current else "disabled ❌"
+    
+    embed = discord.Embed(
+        title='🔔 Notification Settings',
+        description=f'PippyOC notifications are now **{status}**',
+        color=0xFF69B4 if not current else 0x808080,
+        timestamp=datetime.utcnow()
+    )
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name='notification-status', description='Check if notifications are enabled')
+async def notification_status(interaction: discord.Interaction):
+    guild_id = str(interaction.guild.id)
+    enabled = server_settings.get(guild_id, {}).get('notifications_enabled', True)
+    
+    status = "enabled ✅" if enabled else "disabled ❌"
+    
+    embed = discord.Embed(
+        title='🔔 Notification Status',
+        description=f'PippyOC notifications are currently **{status}**',
+        color=0xFF69B4 if enabled else 0x808080,
+        timestamp=datetime.utcnow()
+    )
+    
+    await interaction.response.send_message(embed=embed)
+
 # ============ FUN COMMANDS ============
 @bot.tree.command(name='roll', description='Roll a dice')
 async def roll(interaction: discord.Interaction):
     result = random.randint(1, 6)
     await interaction.response.send_message(f'🎲 You rolled a **{result}**!')
+
 
 @bot.tree.command(name='lyrics', description='Search for song lyrics')
 @app_commands.describe(song='Song name', artist='Artist name')
