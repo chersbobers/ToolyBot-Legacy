@@ -1,6 +1,7 @@
 # Tooly the bot
 A perfect discord bot for the perfect user!
-
+Donations when i can be bothered are optional not forced and will only be to get it as like a discord bot that you add and don't set up.
+Donations will pay for server hosting!
 # Code
 1. fork the repo or clone
 2. upload to github then render and set the .env up you will need the token from the next steam

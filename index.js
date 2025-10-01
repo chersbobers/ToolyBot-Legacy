@@ -221,7 +221,8 @@ const commands = [
     .addStringOption(option => option.setName('question').setDescription('Your question').setRequired(true)),
   new SlashCommandBuilder().setName('kitty').setDescription('Get a random cat picture'),
   new SlashCommandBuilder().setName('joke').setDescription('Get a random joke'),
-  
+  new SlashCommandBuilder().setName('yotsuba').setDescription('Yotsuba picture'),
+
   // Levels
   new SlashCommandBuilder().setName('rank').setDescription('Check your rank and level')
     .addUserOption(option => option.setName('user').setDescription('User to check').setRequired(false)),
@@ -282,6 +283,7 @@ const commands = [
   // YouTube
   new SlashCommandBuilder().setName('checkvideos').setDescription('Check for new PippyOC videos (Mod only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+ 
 ];
 
 client.once('ready', async () => {
@@ -407,6 +409,17 @@ client.on('interactionCreate', async interaction => {
       } catch (error) {
         await interaction.reply('Failed to fetch a cat picture 😿');
       }
+    }
+    
+    if (commandName === 'yotsuba') {
+      const embed = new EmbedBuilder()
+        .setColor(0x77DD77)
+        .setTitle('🍀 Yotsuba!')
+        .setImage('https://i.ibb.co/BDhQV8B/yotsuba.jpg')
+        .setDescription('Here\'s a Yotsuba image!')
+        .setTimestamp();
+
+      await interaction.reply({ embeds: [embed] });
     }
 
     if (commandName === 'joke') {
@@ -609,14 +622,15 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply('❌ You don\'t have enough coins!');
       }
       
+      // Actually transfer coins
       userData.coins -= amount;
-      addCoins(recipient.id, amount);
+      const recipientData = getCoins(recipient.id);
+      recipientData.coins += amount;
       saveData();
       
-      await interaction.reply(`✅ You gave **${amount} coins** to ${recipient.username}!`);
+      return interaction.reply(`✅ Gave **${amount} coins** to ${recipient.username}!`);
     }
-
-    // Moderation commands
+    
     if (commandName === 'warn') {
       const user = interaction.options.getUser('user');
       const reason = interaction.options.getString('reason').slice(0, 500);
@@ -1030,6 +1044,35 @@ client.on('messageCreate', async (message) => {
       
       return message.reply({ embeds: [embed] });
     }
+  }
+
+  // DM relay logic
+  if (message.channel.type === 1 && !message.author.bot) { // type 1 = DM
+    // Relay DM to log channel
+    if (DM_LOG_CHANNEL_ID) {
+      const logChannel = client.channels.cache.get(DM_LOG_CHANNEL_ID);
+      if (logChannel) {
+        const embed = new EmbedBuilder()
+          .setColor(0x3498DB)
+          .setTitle('📩 New DM Received')
+          .setDescription(message.content)
+          .setFooter({ text: `From: ${message.author.tag} (${message.author.id})` })
+          .setTimestamp();
+        await logChannel.send({ embeds: [embed] });
+      }
+    }
+
+    // Basic AI reply (Mee6 style)
+    const content = message.content.toLowerCase();
+    if (content.includes('hi tooly') || content.includes('hello tooly')) {
+      await message.reply('Hi! 👋');
+    } else if (content.includes('how are you')) {
+      await message.reply('I\'m just a bot, but I\'m doing great! 😊');
+    } else if (content.includes('help')) {
+      await message.reply('Need help? Type `/help` in a server for my commands!');
+    }
+    // Add more simple triggers here if you want
+    return;
   }
 });
 
