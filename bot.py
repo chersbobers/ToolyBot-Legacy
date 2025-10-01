@@ -691,9 +691,40 @@ async def help_command(interaction: discord.Interaction):
     embed.set_footer(text='Type / to see all commands!')
     await interaction.response.send_message(embed=embed)
 
-if __name__ == '__main__':
-    token = os.getenv('TOKEN')
-    if not token:
-        logger.error('❌ TOKEN environment variable not set!')
-        exit(1)
-    bot.run(token)
+import aiohttp
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")  # Put your key in .env
+
+@bot.tree.command(name='ai', description='Ask Deepseek AI (OpenRouter)')
+@app_commands.describe(prompt='Your question or prompt for the AI')
+async def ai(interaction: discord.Interaction, prompt: str):
+    await interaction.response.defer()
+    if not OPENROUTER_API_KEY:
+        await interaction.followup.send("❌ OpenRouter API key not set.", ephemeral=True)
+        return
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "deepseek/deepseek-chat-v3.1:free",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    await interaction.followup.send(f"❌ API error: {resp.status}\n{text}", ephemeral=True)
+                    return
+                data = await resp.json()
+                # Deepseek/OpenRouter returns choices[0].message.content
+                answer = data.get("choices", [{}])[0].get("message", {}).get("content", "No response.")
+                await interaction.followup.send(answer)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Failed to contact AI: {e}", ephemeral=True)
