@@ -285,7 +285,43 @@ async def check_videos():
             bot_data.save()
     except Exception as e:
         logger.error(f'Error checking videos: {e}')
-
+@bot.tree.command(name='subs', description='Check YouTube subscriber count for a channel')
+@app_commands.describe(channel_id='YouTube channel ID (leave blank for default)')
+async def subs(interaction: discord.Interaction, channel_id: Optional[str] = None):
+    await interaction.response.defer()
+    api_key = os.getenv('YOUTUBE_API_KEY')
+    default_channel_id = os.getenv('YOUTUBE_CHANNEL_ID')
+    # Use provided channel_id or default from env
+    channel_id = channel_id or default_channel_id
+    if not api_key:
+        await interaction.followup.send('❌ YOUTUBE_API_KEY not set in environment.', ephemeral=True)
+        return
+    if not channel_id:
+        await interaction.followup.send('❌ No channel ID provided and YOUTUBE_CHANNEL_ID not set.', ephemeral=True)
+        return
+    url = f'https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id={channel_id}&key={api_key}'
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status != 200:
+                    await interaction.followup.send(f'❌ YouTube API error: {resp.status}', ephemeral=True)
+                    return
+                data = await resp.json()
+                if not data.get('items'):
+                    await interaction.followup.send('❌ Channel not found.', ephemeral=True)
+                    return
+                info = data['items'][0]
+                subs = info['statistics'].get('subscriberCount', 'N/A')
+                title = info['snippet'].get('title', 'Unknown Channel')
+                embed = discord.Embed(
+                    title=f'📺 {title}',
+                    description=f'**Subscribers:** {subs}',
+                    color=0xFF0000,
+                    timestamp=datetime.utcnow()
+                )
+                await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f'❌ Failed to fetch subscriber count: {e}', ephemeral=True)
 # ============ INFO COMMANDS ============
 @bot.tree.command(name='ping', description='Check bot latency')
 async def ping(interaction: discord.Interaction):
