@@ -793,7 +793,7 @@ async def botinfo(interaction: discord.Interaction):
     embed.add_field(name='📅 Created', value=bot.user.created_at.strftime('%Y-%m-%d'), inline=True)
     embed.add_field(name='💻 Server', value=("RENDER (moving to sparked host)"), inline=True)
     embed.add_field(name='🅿 Python ver', value=("Discord.py 2.3.2 on python 3.11.1"), inline=True)
-    embed.add_field(name='<:tooly:1364760067706191882> Tooly ver', value=("ALPHA 0.6"), inline=True)
+    embed.add_field(name='<:tooly:1364760067706191882> Tooly ver', value=("ALPHA 0.8"), inline=True)
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name='userinfo', description='Show user information')
