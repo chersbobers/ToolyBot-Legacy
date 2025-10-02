@@ -13,9 +13,6 @@ import logging
 import random
 from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
-import yt_dlp
-from discord import FFmpegPCMAudio
-
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -41,41 +38,6 @@ class Config:
     AUTOSAVE_INTERVAL = 300
     VIDEO_CHECK_INTERVAL = 300
     SETTINGS_FILE = 'server_settings.json'
-
-    YTDL_OPTIONS = {
-    'format': 'bestaudio/best',
-    'extractaudio': True,
-    'audioformat': 'mp3',
-    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-    'restrictfilenames': True,
-    'noplaylist': True,
-    'nocheckcertificate': True,
-    'ignoreerrors': False,
-    'logtostderr': False,
-    'quiet': True,
-    'no_warnings': True,
-    'default_search': 'auto',
-    'source_address': '0.0.0.0'
-}
-
-FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn'
-}
-
-ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
-
-class MusicPlayer:
-    def __init__(self):
-        self.queue = {}
-        self.now_playing = {}
-    
-    def get_queue(self, guild_id):
-        if guild_id not in self.queue:
-            self.queue[guild_id] = []
-        return self.queue[guild_id]
-
-music_player = MusicPlayer()
 
 class BotData:
     def __init__(self):
@@ -373,8 +335,9 @@ async def botinfo(interaction: discord.Interaction):
     embed.add_field(name='🤖 Name', value=bot.user.name, inline=True)
     embed.add_field(name='🆔 ID', value=str(bot.user.id), inline=True)
     embed.add_field(name='📅 Created', value=bot.user.created_at.strftime('%Y-%m-%d'), inline=True)
-    embed.add_field(name='💻 Server', value=("Render w 512mb of ram and 0.1 cpu"), inline=True)
+    embed.add_field(name='💻 Server', value=("RENDER (moving to sparked host)"), inline=True)
     embed.add_field(name='🅿 Python ver', value=("Discord.py 2.3.2 on python 3.11.1"), inline=True)
+    embed.add_field(name='<:tooly:1364760067706191882> Tooly ver', value=("ALPHA 0.6"), inline=True)
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name='userinfo', description='Show user information')
@@ -389,215 +352,7 @@ async def userinfo(interaction: discord.Interaction, user: Optional[discord.Memb
     if isinstance(target, discord.Member):
         embed.add_field(name='📥 Joined Server', value=target.joined_at.strftime('%Y-%m-%d'), inline=False)
     await interaction.response.send_message(embed=embed)
-    
 
-#===========music================
-@bot.tree.command(name='join', description='Join your voice channel')
-async def join(interaction: discord.Interaction):
-    if not interaction.user.voice:
-        await interaction.response.send_message('You need to be in a voice channel', ephemeral=True)
-        return
-    
-    channel = interaction.user.voice.channel
-    
-    if interaction.guild.voice_client:
-        await interaction.guild.voice_client.move_to(channel)
-    else:
-        await channel.connect()
-    
-    await interaction.response.send_message(f'Joined {channel.name}')
-
-# Leave voice channel command
-@bot.tree.command(name='leave', description='Leave voice channel')
-async def leave(interaction: discord.Interaction):
-    if interaction.guild.voice_client:
-        await interaction.guild.voice_client.disconnect()
-        music_player.queue[interaction.guild.id] = []
-        await interaction.response.send_message('Left voice channel')
-    else:
-        await interaction.response.send_message('Not in a voice channel', ephemeral=True)
-
-# Play music command
-@bot.tree.command(name='play', description='Play a song')
-@app_commands.describe(query='Song name or YouTube URL')
-async def play(interaction: discord.Interaction, query: str):
-    await interaction.response.defer()
-    
-    if not interaction.user.voice:
-        await interaction.followup.send('You need to be in a voice channel')
-        return
-    
-    voice_client = interaction.guild.voice_client
-    
-    if not voice_client:
-        channel = interaction.user.voice.channel
-        voice_client = await channel.connect()
-    
-    try:
-        # Search YouTube
-        loop = asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(f"ytsearch:{query}", download=False))
-        
-        if 'entries' in data:
-            data = data['entries'][0]
-        
-        url = data['url']
-        title = data['title']
-        duration = data.get('duration', 0)
-        thumbnail = data.get('thumbnail', '')
-        
-        song_info = {
-            'url': url,
-            'title': title,
-            'duration': duration,
-            'thumbnail': thumbnail,
-            'requester': interaction.user
-        }
-        
-        guild_id = interaction.guild.id
-        
-        if voice_client.is_playing():
-            music_player.get_queue(guild_id).append(song_info)
-            
-            minutes = duration // 60
-            seconds = duration % 60
-            
-            embed = discord.Embed(
-                title='Added to Queue',
-                description=f'**{title}**',
-                color=0xFF69B4,
-                timestamp=datetime.utcnow()
-            )
-            embed.set_thumbnail(url=thumbnail)
-            embed.add_field(name='Duration', value=f'{minutes}:{seconds:02d}', inline=True)
-            embed.add_field(name='Position', value=str(len(music_player.get_queue(guild_id))), inline=True)
-            embed.set_footer(text=f'Requested by {interaction.user.name}')
-            
-            await interaction.followup.send(embed=embed)
-        else:
-            await play_song(interaction, voice_client, song_info)
-    
-    except Exception as e:
-        logger.error(f'Play error: {e}')
-        await interaction.followup.send('Failed to play song')
-
-async def play_song(interaction, voice_client, song_info):
-    def after_playing(error):
-        if error:
-            logger.error(f'Player error: {error}')
-        
-        guild_id = interaction.guild.id
-        queue = music_player.get_queue(guild_id)
-        
-        if queue:
-            next_song = queue.pop(0)
-            asyncio.run_coroutine_threadsafe(
-                play_song(interaction, voice_client, next_song),
-                bot.loop
-            )
-    
-    source = FFmpegPCMAudio(song_info['url'], **FFMPEG_OPTIONS)
-    voice_client.play(source, after=after_playing)
-    
-    music_player.now_playing[interaction.guild.id] = song_info
-    
-    minutes = song_info['duration'] // 60
-    seconds = song_info['duration'] % 60
-    
-    embed = discord.Embed(
-        title='Now Playing',
-        description=f'**{song_info["title"]}**',
-        color=0xFF69B4,
-        timestamp=datetime.utcnow()
-    )
-    embed.set_thumbnail(url=song_info['thumbnail'])
-    embed.add_field(name='Duration', value=f'{minutes}:{seconds:02d}', inline=True)
-    embed.set_footer(text=f'Requested by {song_info["requester"].name}')
-    
-    await interaction.followup.send(embed=embed)
-
-# Pause command
-@bot.tree.command(name='pause', description='Pause the music')
-async def pause(interaction: discord.Interaction):
-    if interaction.guild.voice_client and interaction.guild.voice_client.is_playing():
-        interaction.guild.voice_client.pause()
-        await interaction.response.send_message('Paused')
-    else:
-        await interaction.response.send_message('Nothing is playing', ephemeral=True)
-
-# Resume command
-@bot.tree.command(name='resume', description='Resume the music')
-async def resume(interaction: discord.Interaction):
-    if interaction.guild.voice_client and interaction.guild.voice_client.is_paused():
-        interaction.guild.voice_client.resume()
-        await interaction.response.send_message('Resumed')
-    else:
-        await interaction.response.send_message('Nothing is paused', ephemeral=True)
-
-# Skip command
-@bot.tree.command(name='skip', description='Skip the current song')
-async def skip(interaction: discord.Interaction):
-    if interaction.guild.voice_client and interaction.guild.voice_client.is_playing():
-        interaction.guild.voice_client.stop()
-        await interaction.response.send_message('Skipped')
-    else:
-        await interaction.response.send_message('Nothing is playing', ephemeral=True)
-
-# Queue command
-@bot.tree.command(name='queue', description='Show the music queue')
-async def queue(interaction: discord.Interaction):
-    guild_id = interaction.guild.id
-    queue_list = music_player.get_queue(guild_id)
-    
-    if not queue_list and guild_id not in music_player.now_playing:
-        await interaction.response.send_message('Queue is empty')
-        return
-    
-    embed = discord.Embed(title='Music Queue', color=0xFF69B4, timestamp=datetime.utcnow())
-    
-    if guild_id in music_player.now_playing:
-        now = music_player.now_playing[guild_id]
-        embed.add_field(
-            name='Now Playing',
-            value=f'**{now["title"]}**\nRequested by {now["requester"].mention}',
-            inline=False
-        )
-    
-    if queue_list:
-        queue_text = []
-        for i, song in enumerate(queue_list[:10], 1):
-            queue_text.append(f'**{i}.** {song["title"]}')
-        embed.add_field(name='Up Next', value='\n'.join(queue_text), inline=False)
-        
-        if len(queue_list) > 10:
-            embed.set_footer(text=f'And {len(queue_list) - 10} more...')
-    
-    await interaction.response.send_message(embed=embed)
-
-# Now playing command
-@bot.tree.command(name='nowplaying', description='Show current song')
-async def nowplaying(interaction: discord.Interaction):
-    guild_id = interaction.guild.id
-    
-    if guild_id not in music_player.now_playing:
-        await interaction.response.send_message('Nothing is playing')
-        return
-    
-    song = music_player.now_playing[guild_id]
-    minutes = song['duration'] // 60
-    seconds = song['duration'] % 60
-    
-    embed = discord.Embed(
-        title='Now Playing',
-        description=f'**{song["title"]}**',
-        color=0xFF69B4,
-        timestamp=datetime.utcnow()
-    )
-    embed.set_thumbnail(url=song['thumbnail'])
-    embed.add_field(name='Duration', value=f'{minutes}:{seconds:02d}', inline=True)
-    embed.set_footer(text=f'Requested by {song["requester"].name}')
-    
-    await interaction.response.send_message(embed=embed)
 #=============TOGGLES=============
 @bot.tree.command(name='toggle-notifications', description='Toggle PippyOC video notifications on/off')
 @app_commands.default_permissions(manage_guild=True)
