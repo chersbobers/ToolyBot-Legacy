@@ -976,21 +976,26 @@ async def random_pet(interaction: discord.Interaction):
 async def image(interaction: discord.Interaction, query: str):
     await interaction.response.defer()
     try:
-        # Using Unsplash's free API (no key needed for basic usage)
+        # Follow the redirect to get the actual image URL
         url = f'https://source.unsplash.com/1600x900/?{query}'
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                actual_url = str(response.url)  # Get the final URL after redirect
         
         embed = discord.Embed(
             title=f'🔍 {query}', 
             color=0xFF69B4, 
             timestamp=datetime.utcnow()
         )
-        embed.set_image(url=url)
+        embed.set_image(url=actual_url)
         embed.set_footer(text=f'Requested by {interaction.user.name} • Powered by Unsplash')
+        
         await interaction.followup.send(embed=embed)
     except Exception as e:
         logger.error(f'Image search error: {e}')
         await interaction.followup.send('Failed to search for images 😥')
-
+        
 @bot.tree.command(name='joke', description='Get a random joke')
 async def joke(interaction: discord.Interaction):
     await interaction.response.defer()
