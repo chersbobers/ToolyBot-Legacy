@@ -785,7 +785,7 @@ async def serverinfo(interaction: discord.Interaction):
     embed.add_field(name='👑 Owner', value=f'<@{guild.owner_id}>', inline=True)
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name='botinfo', description='Show bots information')
+@bot.tree.command(name='botinfo' or '@Tooly', description='Show bots information')
 async def botinfo(interaction: discord.Interaction):
     embed = discord.Embed(title='Bot Information', color=0x9B59B6, timestamp=datetime.utcnow())
     embed.add_field(name='🤖 Name', value=bot.user.name, inline=True)
@@ -793,7 +793,7 @@ async def botinfo(interaction: discord.Interaction):
     embed.add_field(name='📅 Created', value=bot.user.created_at.strftime('%Y-%m-%d'), inline=True)
     embed.add_field(name='💻 Server', value=("RENDER"), inline=True)
     embed.add_field(name='🅿 Python ver', value=("Discord.py 2.3.2 on python 3.11.1"), inline=True)
-    embed.add_field(name='<:tooly:1364760067706191882> Tooly ver', value=("ALPHA 0.8"), inline=True)
+    embed.add_field(name='<:tooly:1364760067706191882> Tooly ver', value=("beta 1.0 "), inline=True)
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name='userinfo', description='Show user information')
@@ -875,13 +875,14 @@ async def music(interaction: discord.Interaction, song: str, artist: str):
             youtube_query = f'{artist} {song} official music video'.replace(' ', '+')
             youtube_search_url = f'https://www.youtube.com/results?search_query={youtube_query}'
             
-            # Lyrics link
-            song_clean = song.lower().replace(' ', '').replace("'", '').replace('.', '').replace(',', '')
-            artist_clean = artist.lower().replace(' ', '').replace("'", '').replace('.', '').replace(',', '')
+            # Lyrics link - more robust cleaning
+            import re
+            song_clean = re.sub(r'[^a-z0-9]', '', song.lower())
+            artist_clean = re.sub(r'[^a-z0-9]', '', artist.lower())
             lyrics_url = f'https://www.azlyrics.com/lyrics/{artist_clean}/{song_clean}.html'
             
             embed = discord.Embed(
-                title=f'{song}',
+                title=f'🎵 {song}',
                 description=f'by **{artist}**',
                 color=0xFF69B4,
                 timestamp=datetime.utcnow()
@@ -891,27 +892,31 @@ async def music(interaction: discord.Interaction, song: str, artist: str):
             if itunes_data.get('results') and len(itunes_data['results']) > 0:
                 result = itunes_data['results'][0]
                 album_art = result.get('artworkUrl100', '').replace('100x100', '600x600')
-                embed.set_thumbnail(url=album_art)
+                if album_art:
+                    embed.set_thumbnail(url=album_art)
                 if result.get('collectionName'):
-                    embed.add_field(name='Album', value=result['collectionName'], inline=True)
+                    embed.add_field(name='💿 Album', value=result['collectionName'], inline=True)
                 if result.get('releaseDate'):
                     year = result['releaseDate'][:4]
-                    embed.add_field(name='Year', value=year, inline=True)
+                    embed.add_field(name='📅 Year', value=year, inline=True)
                 if result.get('trackTimeMillis'):
                     duration = result['trackTimeMillis'] // 1000
                     minutes = duration // 60
                     seconds = duration % 60
-                    embed.add_field(name='Duration', value=f'{minutes}:{seconds:02d}', inline=True)
+                    embed.add_field(name='⏱️ Duration', value=f'{minutes}:{seconds:02d}', inline=True)
+                if result.get('trackViewUrl'):
+                    embed.add_field(name='🎧 Listen on Apple Music', value=f'[Open in iTunes]({result["trackViewUrl"]})', inline=False)
             
-            embed.add_field(name='Watch on YouTube', value=f'[Search for music video]({youtube_search_url})', inline=False)
-            embed.add_field(name='Read Lyrics', value=f'[View on AZLyrics]({lyrics_url})', inline=False)
+            embed.add_field(name='📺 Watch on YouTube', value=f'[Search for music video]({youtube_search_url})', inline=False)
+            embed.add_field(name='📝 Read Lyrics', value=f'[View on AZLyrics]({lyrics_url})', inline=False)
             embed.set_footer(text=f'Requested by {interaction.user.name}')
             
             await interaction.followup.send(embed=embed)
             
     except Exception as e:
         logger.error(f'Music search error: {e}')
-        await interaction.followup.send('Failed to find song info')
+        await interaction.followup.send('Failed to find song info 😥')
+
 
 @bot.tree.command(name='flip', description='Flip a coin')
 async def flip(interaction: discord.Interaction):
@@ -977,7 +982,7 @@ async def image(interaction: discord.Interaction, query: str):
     await interaction.response.defer()
     try:
         # Follow the redirect to get the actual image URL
-        url = f'https://source.unsplash.com/1600x900/?{query}'
+        url = f'https://api.unsplash.com/search/photos?query={query}'
         
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
@@ -995,7 +1000,7 @@ async def image(interaction: discord.Interaction, query: str):
     except Exception as e:
         logger.error(f'Image search error: {e}')
         await interaction.followup.send('Failed to search for images 😥')
-        
+
 @bot.tree.command(name='joke', description='Get a random joke')
 async def joke(interaction: discord.Interaction):
     await interaction.response.defer()
