@@ -8,7 +8,7 @@ import aiohttp
 import feedparser
 from datetime import datetime, timedelta
 import re
-from typing import Optional, Tuple, List  # Add Tuple, List for AutoMod type hints
+from typing import Optional, Tuple, List
 import logging
 import random
 from duckduckgo_search import DDGS
@@ -22,7 +22,7 @@ logger = logging.getLogger('discord_bot')
 class Config:
     XP_COOLDOWN = 60
     DAILY_COOLDOWN = 86400
-    WORK_COOLDOWN = 3600
+    WORK_COOLDOWN = 900
     NAME_MENTION_COOLDOWN = 30
     
     XP_MIN, XP_MAX = 10, 25
@@ -54,7 +54,6 @@ class BotData:
             if os.path.exists(Config.DATA_FILE):
                 with open(Config.DATA_FILE, 'r') as f:
                     loaded = json.load(f)
-                    # Merge with defaults to handle missing keys
                     self.data.update(loaded)
                 logger.info('Data loaded successfully')
         except Exception as e:
@@ -86,6 +85,7 @@ class BotData:
         if user_id not in self.data['warnings']:
             self.data['warnings'][user_id] = []
         self.data['warnings'][user_id].append(warning)
+
 def load_server_settings():
     if os.path.exists(Config.SETTINGS_FILE):
         with open(Config.SETTINGS_FILE, 'r') as f:
@@ -97,19 +97,16 @@ def save_server_settings(settings):
         json.dump(settings, f, indent=2)
 
 def get_shop_items(bot_data):
-    """Get all shop items"""
     if 'shop_items' not in bot_data.data:
         bot_data.data['shop_items'] = {}
     return bot_data.data['shop_items']
 
 def get_user_inventory(bot_data, user_id: str):
-    """Get user's purchased items"""
     if 'inventory' not in bot_data.data:
         bot_data.data['inventory'] = {}
     return bot_data.data['inventory'].get(user_id, {})
 
 def add_to_inventory(bot_data, user_id: str, item_id: str):
-    """Add item to user's inventory"""
     if 'inventory' not in bot_data.data:
         bot_data.data['inventory'] = {}
     if user_id not in bot_data.data['inventory']:
@@ -120,134 +117,29 @@ def add_to_inventory(bot_data, user_id: str, item_id: str):
     }
 
 class AutoMod:
-    """Enhanced AutoMod with multiple detection methods"""
-    
     @staticmethod
     def normalize_text(text: str) -> str:
-        """Normalize text for pattern matching"""
         normalized = text.lower()
         normalized = re.sub(r'\s+', '', normalized)
         normalized = re.sub(r'[^a-z0-9]', '', normalized)
-        replacements = {
-            '0': 'o', '1': 'i', '3': 'e', '4': 'a', 
-            '5': 's', '7': 't', '8': 'b', '@': 'a',
-            '$': 's', '!': 'i', '9': 'g'
-        }
+        replacements = {'0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b'}
         for old, new in replacements.items():
             normalized = normalized.replace(old, new)
         return normalized
     
     @staticmethod
-    def check_inappropriate(content: str) -> Tuple[bool, List[str]]:
-        """
-        Check for inappropriate content using multiple methods
-        Returns: (is_blocked, list_of_reasons)
-        """
-        reasons = []
-        
-        # Check 1: Spam detection
-        if AutoMod._check_spam(content):
-            reasons.append("spam")
-        
-        # Check 2: Excessive caps/aggression
-        if AutoMod._check_aggressive_formatting(content):
-            reasons.append("aggressive_formatting")
-        
-        # Check 3: Unauthorized invites
-        if AutoMod._check_invites(content):
-            reasons.append("unauthorized_invite")
-        
-        # Check 4: PII exposure (protect users)
-        if AutoMod._check_pii(content):
-            reasons.append("personal_information")
-        
-        # Check 5: Excessive mentions
-        if AutoMod._check_mass_mentions(content):
-            reasons.append("mass_mentions")
-        
-        # Return True if any reason was flagged
-        return len(reasons) > 0, reasons
-    
-    @staticmethod
-    def _check_spam(content: str) -> bool:
-        """Detect spam patterns"""
-        # Multiple URLs
-        url_count = len(re.findall(r'https?://\S+', content))
-        if url_count >= 3:
-            return True
-        
-        # Excessive character repetition
-        if re.search(r'(.)\1{10,}', content):
-            return True
-        
-        # Common spam phrases
-        spam_patterns = [
-            r'(?i)(buy|click|subscribe|follow).{0,20}(now|here|link)',
-            r'(?i)(free|win|prize).{0,30}(click|link|here)',
+    def check_inappropriate(content: str) -> bool:
+        normalized = AutoMod.normalize_text(content)
+        blocked_patterns = [
+            r'n[il]+[gq]+[ea]+r',
+            r'n[il]+[gq]+[a]+',
+            r'f[a]+[gq]+[gq]?[o]+[t]',
+            r'r[e]+[t]+[a]+r?d',
+            r'k[il]+k[e]+',
         ]
-        for pattern in spam_patterns:
-            if re.search(pattern, content):
+        for pattern in blocked_patterns:
+            if re.search(pattern, normalized, re.IGNORECASE):
                 return True
-        
-        return False
-    
-    @staticmethod
-    def _check_aggressive_formatting(content: str) -> bool:
-        """Check for aggressive formatting"""
-        if len(content) < 10:
-            return False
-        
-        # Excessive caps (>70% uppercase)
-        caps_ratio = sum(1 for c in content if c.isupper()) / len(content)
-        if caps_ratio > 0.7:
-            return True
-        
-        # Excessive punctuation
-        punct_count = len(re.findall(r'[!?]{3,}', content))
-        if punct_count >= 2:
-            return True
-        
-        return False
-    
-    @staticmethod
-    def _check_invites(content: str) -> bool:
-        """Check for Discord invite links"""
-        invite_patterns = [
-            r'discord\.gg/[a-zA-Z0-9]+',
-            r'discord\.com/invite/[a-zA-Z0-9]+',
-            r'discordapp\.com/invite/[a-zA-Z0-9]+'
-        ]
-        for pattern in invite_patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                return True
-        return False
-    
-    @staticmethod
-    def _check_pii(content: str) -> bool:
-        """Detect personal information to protect users"""
-        pii_patterns = [
-            r'\b\d{3}-\d{2}-\d{4}\b',  # SSN
-            r'\b\d{16}\b',  # Credit card
-            r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',  # Phone number
-            r'\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b',  # Email (common pattern)
-        ]
-        for pattern in pii_patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                return True
-        return False
-    
-    @staticmethod
-    def _check_mass_mentions(content: str) -> bool:
-        """Check for mass mentions"""
-        # Check for @everyone or @here
-        if re.search(r'@(everyone|here)', content, re.IGNORECASE):
-            return True
-        
-        # Check for excessive user mentions (>5)
-        mention_count = len(re.findall(r'<@!?\d+>', content))
-        if mention_count > 5:
-            return True
-        
         return False
 
 intents = discord.Intents.default()
@@ -318,104 +210,42 @@ async def on_message(message: discord.Message):
         if dm_log_channel_id:
             channel = bot.get_channel(int(dm_log_channel_id))
             if channel:
-                embed = discord.Embed(title='📩 DM Received', description=message.content, color=0x3498DB, timestamp=datetime.utcnow())
+                embed = discord.Embed(
+                    title='📩 DM Received', 
+                    description=message.content, 
+                    color=0x3498DB, 
+                    timestamp=datetime.utcnow()
+                )
                 embed.set_footer(text=f'From: {message.author} ({message.author.id})')
                 await channel.send(embed=embed)
         return
 
-    # Automod
-    automod_enabled = os.getenv('AUTOMOD_ENABLED', 'true').lower() == 'true'
-    if automod_enabled:
-        is_blocked, reasons = AutoMod.check_inappropriate(message.content)
-        if is_blocked:
-            try:
-                await message.delete()
-                user_id = str(message.author.id)
-
-                # Create detailed warning message
-                reason_text = ', '.join(reasons)
-                warning = {
-                    'reason': f'Automod: {reason_text}',
-                    'mod': str(bot.user.id),
-                    'timestamp': datetime.utcnow().timestamp()
-                }
-                bot_data.add_warning(user_id, warning)
-                bot_data.save()
-
-                warnings = bot_data.get_warnings(user_id)
-                warn_count = len(warnings)
-
-                warn_msg = await message.channel.send(
-                    f'⚠️ {message.author.mention}, your message was removed. '
-                    f'Reason: {reason_text}. Warning {warn_count}/{Config.WARN_THRESHOLD}'
-                )
-                await asyncio.sleep(5)
-                await warn_msg.delete()
-
-                # Timeout if threshold reached
-                if warn_count >= Config.WARN_THRESHOLD:
-                    try:
-                        duration = timedelta(minutes=Config.TIMEOUT_DURATION)
-                        await message.author.timeout(
-                            duration,
-                            reason=f'Automod: {Config.WARN_THRESHOLD} warnings reached'
-                        )
-                        await message.channel.send(
-                            f'🔇 {message.author.mention} has been timed out for '
-                            f'{Config.TIMEOUT_DURATION} minutes due to repeated violations.'
-                        )
-                    except Exception as e:
-                        logger.error(f'Failed to timeout user: {e}')
-
-                # Log to moderation channel
-                log_channel_id = os.getenv('AUTOMOD_LOG_CHANNEL')
-                if log_channel_id:
-                    log_channel = bot.get_channel(int(log_channel_id))
-                    if log_channel:
-                        embed = discord.Embed(
-                            title='🛡️ Automod Action',
-                            color=0xFF0000,
-                            timestamp=datetime.utcnow()
-                        )
-                        embed.add_field(
-                            name='User',
-                            value=f'{message.author} ({message.author.id})',
-                            inline=True
-                        )
-                        embed.add_field(
-                            name='Channel',
-                            value=message.channel.mention,
-                            inline=True
-                        )
-                        embed.add_field(
-                            name='Violation Type',
-                            value=reason_text,
-                            inline=False
-                        )
-                        embed.add_field(
-                            name='Content',
-                            value=f'||{message.content[:200]}||',
-                            inline=False
-                        )
-                        embed.add_field(
-                            name='Warnings',
-                            value=f'{warn_count}/{Config.WARN_THRESHOLD}',
-                            inline=True
-                        )
-                        await log_channel.send(embed=embed)
-            except Exception as e:
-                logger.error(f'Automod error: {e}')
-            return
+    # AutoMod check
+    is_blocked, reasons = AutoMod.check_inappropriate(message.content)
+    if is_blocked:
+        try:
+            await message.delete()
+            reason_text = ', '.join(reasons)
+            await message.channel.send(
+                f'⚠️ {message.author.mention}, your message was removed for: {reason_text}',
+                delete_after=5
+            )
+            logger.info(f'Blocked message from {message.author}: {reason_text}')
+        except discord.Forbidden:
+            logger.warning('Missing permissions to delete message')
+        return
 
     # XP system
     user_id = str(message.author.id)
     user_data = bot_data.get_user_level(user_id)
     now = datetime.utcnow().timestamp()
+    
     if now - user_data['lastMessage'] >= Config.XP_COOLDOWN:
         user_data['lastMessage'] = now
         xp_gain = random.randint(Config.XP_MIN, Config.XP_MAX)
         user_data['xp'] += xp_gain
         xp_needed = user_data['level'] * Config.XP_PER_LEVEL
+        
         if user_data['xp'] >= xp_needed:
             user_data['level'] += 1
             user_data['xp'] = 0
@@ -429,7 +259,10 @@ async def on_message(message: discord.Message):
             economy_data = bot_data.get_user_economy(user_id)
             economy_data['coins'] += coin_reward
             bot_data.set_user_economy(user_id, economy_data)
-            await message.channel.send(f'{random.choice(messages)} You earned **{coin_reward} coins**! 💰')
+            await message.channel.send(
+                f'{random.choice(messages)} You earned **{coin_reward} coins**! 💰'
+            )
+        
         bot_data.set_user_level(user_id, user_data)
         bot_data.save()
 
@@ -438,9 +271,12 @@ async def on_message(message: discord.Message):
     if any(name.lower() in content_lower for name in ['clanka', 'clanker', 'tinskin']):
         cooldown_key = f'{message.author.id}-{message.channel.id}'
         now = datetime.utcnow().timestamp()
+        
         if cooldown_key in name_mention_cooldowns:
             if now - name_mention_cooldowns[cooldown_key] < Config.NAME_MENTION_COOLDOWN:
+                await bot.process_commands(message)
                 return
+        
         name_mention_cooldowns[cooldown_key] = now
         responses = [
             'Robophobia in the big 25', 'Woah you cant say', 'DONT SLUR AT ME!', '@Pippy ban them',
@@ -452,8 +288,8 @@ async def on_message(message: discord.Message):
             'BOP A DOO WOP A BOP A DOO WOP', 'BOP A DOO WOP A BOP A DOO WOP A BOP A DOO WOP'
         ]
         await message.reply(random.choice(responses))
-
-    await bot.process_commands(message)  # Ensure commands work with on_message
+    
+    await bot.process_commands(message)
 
 @tasks.loop(seconds=Config.AUTOSAVE_INTERVAL)
 async def autosave():
@@ -475,15 +311,20 @@ async def check_videos():
             if video_id != bot_data.data['lastVideoId'] and bot_data.data['lastVideoId']:
                 channel = bot.get_channel(int(notif_channel_id))
                 if channel:
-                    # CHECK IF NOTIFICATIONS ARE ENABLED FOR THIS SERVER
                     guild_id = str(channel.guild.id)
                     if not server_settings.get(guild_id, {}).get('notifications_enabled', True):
                         logger.info(f'Notifications disabled for guild {guild_id}')
                         bot_data.data['lastVideoId'] = video_id
                         bot_data.save()
                         return
-                    
-                    embed = discord.Embed(title='🎬 New PippyOC Video!', description=f'**{latest.title}**', url=latest.link, color=0xFF0000, timestamp=datetime.utcnow())
+
+                    embed = discord.Embed(
+                        title='🎬 New PippyOC Video!',
+                        description=f'**{latest.title}**',
+                        url=latest.link,
+                        color=0xFF0000,
+                        timestamp=datetime.utcnow()
+                    )
                     if hasattr(latest, 'media_thumbnail'):
                         embed.set_thumbnail(url=latest.media_thumbnail[0]['url'])
                     embed.add_field(name='Channel', value=latest.author, inline=True)
@@ -793,7 +634,7 @@ async def botinfo(interaction: discord.Interaction):
     embed.add_field(name='📅 Created', value=bot.user.created_at.strftime('%Y-%m-%d'), inline=True)
     embed.add_field(name='💻 Server', value=("RENDER"), inline=True)
     embed.add_field(name='🅿 Python ver', value=("Discord.py 2.3.2 on python 3.11.1"), inline=True)
-    embed.add_field(name='<:tooly:1364760067706191882> Tooly build', value=("beta 1.1"), inline=True)
+    embed.add_field(name='<:tooly:1364760067706191882> Tooly build', value=("beta 1.2"), inline=True)
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name='userinfo', description='Show user information')
@@ -865,24 +706,28 @@ async def music(interaction: discord.Interaction, song: str, artist: str):
         #search_query = f'{artist} {song}'
 
         async with aiohttp.ClientSession() as session:
-            
             # Search YouTube for official music video
             youtube_query = f'{artist} {song} official music video'.replace(' ', '+')
             youtube_search_url = f'https://www.youtube.com/results?search_query={youtube_query}'
-            
+
             # Lyrics link - more robust cleaning
             import re
             song_clean = re.sub(r'[^a-z0-9]', '', song.lower())
             artist_clean = re.sub(r'[^a-z0-9]', '', artist.lower())
             lyrics_url = f'https://www.azlyrics.com/lyrics/{artist_clean}/{song_clean}.html'
-            
+
+            # iTunes API for song info
+            itunes_url = f'https://itunes.apple.com/search?term={artist}+{song}&entity=song&limit=1'
+            async with session.get(itunes_url) as resp:
+                itunes_data = await resp.json()
+
             embed = discord.Embed(
                 title=f'🎵 {song}',
                 description=f'by **{artist}**',
                 color=0xFF69B4,
                 timestamp=datetime.utcnow()
             )
-            
+
             # Add album art and info if found
             if itunes_data.get('results') and len(itunes_data['results']) > 0:
                 result = itunes_data['results'][0]
@@ -901,13 +746,13 @@ async def music(interaction: discord.Interaction, song: str, artist: str):
                     embed.add_field(name='⏱️ Duration', value=f'{minutes}:{seconds:02d}', inline=True)
                 if result.get('trackViewUrl'):
                     embed.add_field(name='🎧 Listen on Apple Music', value=f'[Open in iTunes]({result["trackViewUrl"]})', inline=False)
-            
+
             embed.add_field(name='📺 Watch on YouTube', value=f'[Search for music video]({youtube_search_url})', inline=False)
             embed.add_field(name='📝 Read Lyrics', value=f'[View on AZLyrics]({lyrics_url})', inline=False)
             embed.set_footer(text=f'Requested by {interaction.user.name}')
-            
+
             await interaction.followup.send(embed=embed)
-            
+
     except Exception as e:
         logger.error(f'Music search error: {e}')
         await interaction.followup.send('Failed to find song info 😥')
@@ -987,6 +832,9 @@ async def image(interaction: discord.Interaction, query: str):
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    await interaction.followup.send('Failed to contact Pexels API.')
+                    return
                 data = await response.json()
                 if not data.get('photos'):
                     await interaction.followup.send('No images found for your query.')
