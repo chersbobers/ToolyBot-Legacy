@@ -338,7 +338,7 @@ async def balance(interaction: discord.Interaction, user: Optional[discord.Membe
     target = user or interaction.user
     user_id = str(target.id)
     economy_data = bot_data.get_user_economy(user_id)
-    embed = discord.Embed(titletree.command(name='shop', description='Browse the shop')
+    embed = discord.Embed(titletree.command(name='shop', description='Browse the shop'))
 async def shop(interaction: discord.Interaction):
     """User TUI for browsing shop"""
     
