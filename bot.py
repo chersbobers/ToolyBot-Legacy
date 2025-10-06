@@ -1189,4 +1189,9 @@ async def listitems(interaction: discord.Interaction):
 
 # ============ USER COMMANDS - BUY ITEMS ============
 
-@bot.run(token)
+if __name__ == '__main__':
+    token = os.getenv('TOKEN')
+    if not token:
+        logger.error('❌ TOKEN environment variable not set!')
+        exit(1)
+    bot.run(token)
