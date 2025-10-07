@@ -9,12 +9,12 @@ import feedparser
 from datetime import datetime, timedelta
 import re
 from typing import Optional, Tuple, List
-import logging
 import random
 from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
 
 # Setup logging
+import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('discord_bot')
 
@@ -86,7 +86,8 @@ class BotData:
             'lastFish': 0,
             'fishCaught': 0,
             'totalGambled': 0,
-            'gamblingWins': 0
+            'gamblingWins': 0,
+            'fishInventory': {}  # NEW: Store caught fish
         })
     
     def set_user_economy(self, user_id: str, data: dict):
@@ -182,6 +183,28 @@ async def start_web_server():
     await site.start()
     logger.info(f'Web server running on port {port}')
 
+# ============ FISH TYPES (EXPANDED) ============
+FISH_TYPES = [
+    {'emoji': '🐟', 'name': 'Common Fish', 'value': 50, 'weight': 50},
+    {'emoji': '🐠', 'name': 'Tropical Fish', 'value': 100, 'weight': 30},
+    {'emoji': '🦈', 'name': 'Shark', 'value': 300, 'weight': 10},
+    {'emoji': '🐙', 'name': 'Octopus', 'value': 200, 'weight': 15},
+    {'emoji': '🦀', 'name': 'Crab', 'value': 75, 'weight': 25},
+    {'emoji': '🐢', 'name': 'Turtle', 'value': 150, 'weight': 20},
+    {'emoji': '🦞', 'name': 'Lobster', 'value': 180, 'weight': 18},
+    {'emoji': '🐡', 'name': 'Pufferfish', 'value': 220, 'weight': 12},
+    {'emoji': '🦑', 'name': 'Squid', 'value': 140, 'weight': 22},
+    {'emoji': '🐋', 'name': 'Whale', 'value': 500, 'weight': 5},
+    {'emoji': '🐬', 'name': 'Dolphin', 'value': 350, 'weight': 8},
+    {'emoji': '🦭', 'name': 'Seal', 'value': 280, 'weight': 9},
+    {'emoji': '🐚', 'name': 'Pearl', 'value': 400, 'weight': 6},
+    {'emoji': '⚓', 'name': 'Old Anchor', 'value': 250, 'weight': 8},
+    {'emoji': '💎', 'name': 'Diamond', 'value': 1000, 'weight': 2},
+    {'emoji': '🏆', 'name': 'Golden Trophy', 'value': 1500, 'weight': 1},
+    {'emoji': '👢', 'name': 'Old Boot', 'value': 10, 'weight': 40},
+    {'emoji': '🥫', 'name': 'Tin Can', 'value': 5, 'weight': 35},
+]
+
 @bot.tree.command(name='flip', description='Flip a coin')
 async def flip(interaction: discord.Interaction):
     result = random.choice(['Heads', 'Tails'])
@@ -245,7 +268,6 @@ async def random_pet(interaction: discord.Interaction):
 async def image(interaction: discord.Interaction, query: str):
     await interaction.response.defer()
     try:
-        # Pexels API image search
         PEXELS_API_KEY = os.getenv('PEXELS_API_KEY')
         if not PEXELS_API_KEY:
             await interaction.followup.send('Pexels API key not set. Please set PEXELS_API_KEY in your environment.')
@@ -338,10 +360,78 @@ async def balance(interaction: discord.Interaction, user: Optional[discord.Membe
     target = user or interaction.user
     user_id = str(target.id)
     economy_data = bot_data.get_user_economy(user_id)
-    embed = discord.Embed(titletree.command(name='shop', description='Browse the shop'))
-async def shop(interaction: discord.Interaction):
-    """User TUI for browsing shop"""
+    embed = discord.Embed(title=f'💰 {target.name}\'s Balance', color=0xFFD700, timestamp=datetime.utcnow())
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.add_field(name='💵 Wallet', value=f'{economy_data["coins"]:,} coins', inline=True)
+    embed.add_field(name='🏦 Bank', value=f'{economy_data["bank"]:,} coins', inline=True)
+    embed.add_field(name='💎 Total', value=f'{economy_data["coins"] + economy_data["bank"]:,} coins', inline=True)
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name='daily', description='Claim your daily reward')
+async def daily(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    economy_data = bot_data.get_user_economy(user_id)
+    now = datetime.utcnow().timestamp()
     
+    if now - economy_data.get('lastDaily', 0) < Config.DAILY_COOLDOWN:
+        time_left = Config.DAILY_COOLDOWN - (now - economy_data.get('lastDaily', 0))
+        hours = int(time_left // 3600)
+        minutes = int((time_left % 3600) // 60)
+        await interaction.response.send_message(
+            f'⏳ You already claimed your daily! Come back in {hours}h {minutes}m',
+            ephemeral=True
+        )
+        return
+    
+    reward = random.randint(Config.DAILY_MIN, Config.DAILY_MAX)
+    economy_data['coins'] += reward
+    economy_data['lastDaily'] = now
+    bot_data.set_user_economy(user_id, economy_data)
+    bot_data.save()
+    
+    embed = discord.Embed(
+        title='🎁 Daily Reward Claimed!',
+        description=f'You received **{reward} coins**!',
+        color=0x00FF00,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=False)
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name='work', description='Work for coins')
+async def work(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    economy_data = bot_data.get_user_economy(user_id)
+    now = datetime.utcnow().timestamp()
+    
+    if now - economy_data.get('lastWork', 0) < Config.WORK_COOLDOWN:
+        time_left = Config.WORK_COOLDOWN - (now - economy_data.get('lastWork', 0))
+        minutes = int(time_left // 60)
+        await interaction.response.send_message(
+            f'⏳ You need to rest! Come back in {minutes}m',
+            ephemeral=True
+        )
+        return
+    
+    jobs = ['programmer', 'chef', 'teacher', 'doctor', 'artist', 'musician', 'writer', 'engineer']
+    job = random.choice(jobs)
+    reward = random.randint(Config.WORK_MIN, Config.WORK_MAX)
+    economy_data['coins'] += reward
+    economy_data['lastWork'] = now
+    bot_data.set_user_economy(user_id, economy_data)
+    bot_data.save()
+    
+    embed = discord.Embed(
+        title=f'💼 You worked as a {job}!',
+        description=f'You earned **{reward} coins**!',
+        color=0x3498DB,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=False)
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name='shop', description='Browse the shop')
+async def shop(interaction: discord.Interaction):
     shop_items = get_shop_items(bot_data)
     
     if not shop_items:
@@ -355,7 +445,6 @@ async def shop(interaction: discord.Interaction):
         timestamp=datetime.utcnow()
     )
     
-    # Group by type
     roles = {k: v for k, v in shop_items.items() if v['type'] == 'role'}
     badges = {k: v for k, v in shop_items.items() if v['type'] == 'badge'}
     consumables = {k: v for k, v in shop_items.items() if v['type'] == 'consumable'}
@@ -381,7 +470,6 @@ async def shop(interaction: discord.Interaction):
         ])
         embed.add_field(name='✨ Consumables', value=consumable_text, inline=False)
     
-    # Show user's balance
     user_id = str(interaction.user.id)
     economy_data = bot_data.get_user_economy(user_id)
     embed.set_footer(text=f'Your balance: {economy_data["coins"]} coins | Use /inventory to see owned items')
@@ -391,11 +479,8 @@ async def shop(interaction: discord.Interaction):
 @bot.tree.command(name='buy', description='Purchase an item from the shop')
 @app_commands.describe(item_id='Item ID to purchase (see /shop)')
 async def buy(interaction: discord.Interaction, item_id: str):
-    """User TUI for buying items"""
-    
     shop_items = get_shop_items(bot_data)
     
-    # Check if item exists
     if item_id not in shop_items:
         await interaction.response.send_message('❌ Invalid item ID! Use `/shop` to see available items.', ephemeral=True)
         return
@@ -403,13 +488,11 @@ async def buy(interaction: discord.Interaction, item_id: str):
     item = shop_items[item_id]
     user_id = str(interaction.user.id)
     
-    # Check if already owned (except consumables)
     inventory = get_user_inventory(bot_data, user_id)
     if item_id in inventory and item['type'] != 'consumable':
         await interaction.response.send_message(f'❌ You already own **{item["name"]}**!', ephemeral=True)
         return
     
-    # Check balance
     economy_data = bot_data.get_user_economy(user_id)
     if economy_data['coins'] < item['price']:
         needed = item['price'] - economy_data['coins']
@@ -419,13 +502,11 @@ async def buy(interaction: discord.Interaction, item_id: str):
         )
         return
     
-    # Process purchase
     economy_data['coins'] -= item['price']
     bot_data.set_user_economy(user_id, economy_data)
     add_to_inventory(bot_data, user_id, item_id)
     bot_data.save()
     
-    # Handle role items
     if item['type'] == 'role' and item.get('role_id'):
         try:
             role = interaction.guild.get_role(int(item['role_id']))
@@ -434,7 +515,6 @@ async def buy(interaction: discord.Interaction, item_id: str):
         except Exception as e:
             logger.error(f'Error adding role: {e}')
     
-    # Success message
     embed = discord.Embed(
         title='✅ Purchase Successful!',
         description=f'You purchased **{item["name"]}**!',
@@ -452,8 +532,6 @@ async def buy(interaction: discord.Interaction, item_id: str):
 
 @bot.tree.command(name='inventory', description='View your purchased items')
 async def inventory(interaction: discord.Interaction):
-    """View user inventory"""
-    
     user_id = str(interaction.user.id)
     inventory = get_user_inventory(bot_data, user_id)
     shop_items = get_shop_items(bot_data)
@@ -503,63 +581,57 @@ async def serverinfo(interaction: discord.Interaction):
 
 @bot.tree.command(name='botinfo', description='Show detailed bot information')
 async def botinfo(interaction: discord.Interaction):
-    """Enhanced bot info with stats"""
     import platform
     import psutil
     import sys
     
-    # Calculate stats
     total_users = len(bot_data.data.get('levels', {}))
     total_coins = sum(e.get('coins', 0) + e.get('bank', 0) for e in bot_data.data.get('economy', {}).values())
     total_guilds = len(bot.guilds)
     total_commands = len(bot.tree.get_commands())
     
-    # System info
     process = psutil.Process()
-    memory_usage = process.memory_info().rss / 1024 / 1024  # MB
+    memory_usage = process.memory_info().rss / 1024 / 1024
     cpu_usage = process.cpu_percent()
     
     embed = discord.Embed(
         title='<:tooly:1364760067706191882> Tooly Bot Information',
-        description='A Discord bot with leveling, economy, moderation, and more!',
+        description='A feature-rich Discord bot with leveling, economy, fishing, moderation, and more!',
         color=0x9B59B6,
         timestamp=datetime.utcnow()
     )
     
-    # Bot Info
     embed.add_field(name='🤖 Bot Name', value=bot.user.name, inline=True)
     embed.add_field(name='🆔 Bot ID', value=str(bot.user.id), inline=True)
     embed.add_field(name='📅 Created', value=bot.user.created_at.strftime('%Y-%m-%d'), inline=True)
     
-    # Version Info
-    embed.add_field(name='<:tooly:1364760067706191882> Tooly Version', value='Beta 1.3 (Enhanced)', inline=True)
+    embed.add_field(name='<:tooly:1364760067706191882> Version', value='**Beta 1.4**', inline=True)
     embed.add_field(name='🐍 Python', value=f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}', inline=True)
     embed.add_field(name='📚 Discord.py', value=discord.__version__, inline=True)
     
-    # Stats
     embed.add_field(name='📊 Servers', value=str(total_guilds), inline=True)
     embed.add_field(name='👥 Tracked Users', value=str(total_users), inline=True)
     embed.add_field(name='💰 Total Economy', value=f'{total_coins:,} coins', inline=True)
     
-    # System
     embed.add_field(name='💻 Hosting', value='Render Cloud', inline=True)
     embed.add_field(name='🧠 RAM Usage', value=f'{memory_usage:.1f} MB', inline=True)
     embed.add_field(name='⚡ CPU Usage', value=f'{cpu_usage:.1f}%', inline=True)
     
-    # Features
     features = [
         '✅ XP & Leveling System',
         '✅ Economy with Shop',
-        '✅ Fishing & Gambling',
+        '✅ Enhanced Fishing (18 fish types!)',
+        '✅ Fish Selling System',
+        '✅ Gambling Minigame',
         '✅ Auto-Moderation',
         '✅ YouTube Notifications',
-        '✅ Auto-Updating Leaderboard'
+        '✅ Auto-Updating Leaderboards'
     ]
     embed.add_field(name='🎯 Features', value='\n'.join(features), inline=False)
     
     embed.add_field(name='⚙️ Commands', value=f'{total_commands} slash commands', inline=True)
     embed.add_field(name='🏓 Latency', value=f'{round(bot.latency * 1000)}ms', inline=True)
-    embed.add_field(name='⏰ Uptime', value='Check /ping', inline=True)
+    embed.add_field(name='📈 Status', value='✅ Online', inline=True)
     
     embed.set_footer(text='Made with ❤️ by chersbobers | Use /help for commands')
     
@@ -574,7 +646,6 @@ async def userinfo(interaction: discord.Interaction, user: Optional[discord.Memb
     target = user or interaction.user
     user_id = str(target.id)
     
-    # Get user stats
     level_data = bot_data.get_user_level(user_id)
     economy_data = bot_data.get_user_economy(user_id)
     
@@ -587,7 +658,6 @@ async def userinfo(interaction: discord.Interaction, user: Optional[discord.Memb
     if isinstance(target, discord.Member):
         embed.add_field(name='📥 Joined Server', value=target.joined_at.strftime('%Y-%m-%d'), inline=False)
     
-    # Add stats
     embed.add_field(name='⭐ Level', value=str(level_data['level']), inline=True)
     embed.add_field(name='✨ XP', value=str(level_data['xp']), inline=True)
     embed.add_field(name='💰 Coins', value=f"{economy_data['coins']:,}", inline=True)
@@ -601,13 +671,11 @@ async def userinfo(interaction: discord.Interaction, user: Optional[discord.Memb
 @bot.tree.command(name='setleaderboard', description='[ADMIN] Set auto-updating leaderboard in this channel')
 @app_commands.default_permissions(administrator=True)
 async def setleaderboard(interaction: discord.Interaction):
-    """Set up auto-updating leaderboard"""
     await interaction.response.defer()
     
     embed = generate_leaderboard_embed(str(interaction.guild.id))
     message = await interaction.channel.send(embed=embed)
     
-    # Save message info
     if 'leaderboard_messages' not in bot_data.data:
         bot_data.data['leaderboard_messages'] = {}
     
@@ -619,7 +687,6 @@ async def setleaderboard(interaction: discord.Interaction):
     
     await interaction.followup.send('✅ Auto-updating leaderboard created! It will update every hour.')
 
-#=============TOGGLES=============
 @bot.tree.command(name='toggle-notifications', description='Toggle PippyOC video notifications on/off')
 @app_commands.default_permissions(manage_guild=True)
 async def toggle_notifications(interaction: discord.Interaction):
@@ -660,7 +727,6 @@ async def notification_status(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
-# ============ FUN COMMANDS ============
 @bot.tree.command(name='roll', description='Roll a dice')
 async def roll(interaction: discord.Interaction):
     result = random.randint(1, 6)
@@ -672,16 +738,13 @@ async def music(interaction: discord.Interaction, song: str, artist: str):
     await interaction.response.defer()
     try:
         async with aiohttp.ClientSession() as session:
-            # Search YouTube for official music video
             youtube_query = f'{artist} {song} official music video'.replace(' ', '+')
             youtube_search_url = f'https://www.youtube.com/results?search_query={youtube_query}'
 
-            # Lyrics link - more robust cleaning
             song_clean = re.sub(r'[^a-z0-9]', '', song.lower())
             artist_clean = re.sub(r'[^a-z0-9]', '', artist.lower())
             lyrics_url = f'https://www.azlyrics.com/lyrics/{artist_clean}/{song_clean}.html'
 
-            # iTunes API for song info
             itunes_url = f'https://itunes.apple.com/search?term={artist}+{song}&entity=song&limit=1'
             async with session.get(itunes_url) as resp:
                 itunes_data = await resp.json()
@@ -693,7 +756,6 @@ async def music(interaction: discord.Interaction, song: str, artist: str):
                 timestamp=datetime.utcnow()
             )
 
-            # Add album art and info if found
             if itunes_data.get('results') and len(itunes_data['results']) > 0:
                 result = itunes_data['results'][0]
                 album_art = result.get('artworkUrl100', '').replace('100x100', '600x600')
@@ -722,6 +784,349 @@ async def music(interaction: discord.Interaction, song: str, artist: str):
         logger.error(f'Music search error: {e}')
         await interaction.followup.send('Failed to find song info 😥')
 
+# ============ FISHING COMMANDS ============
+@bot.tree.command(name='fish', description='Go fishing for coins and treasures')
+async def fish(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    economy_data = bot_data.get_user_economy(user_id)
+    now = datetime.utcnow().timestamp()
+    
+    if now - economy_data.get('lastFish', 0) < Config.FISH_COOLDOWN:
+        time_left = Config.FISH_COOLDOWN - (now - economy_data.get('lastFish', 0))
+        await interaction.response.send_message(
+            f'⏳ Your fishing rod needs to rest! Come back in {int(time_left)} seconds.',
+            ephemeral=True
+        )
+        return
+    
+    total_weight = sum(o['weight'] for o in FISH_TYPES)
+    rand = random.uniform(0, total_weight)
+    current = 0
+    
+    for outcome in FISH_TYPES:
+        current += outcome['weight']
+        if rand <= current:
+            catch = outcome
+            break
+    
+    # Store fish in inventory instead of auto-selling
+    if 'fishInventory' not in economy_data:
+        economy_data['fishInventory'] = {}
+    
+    fish_key = catch['name']
+    if fish_key not in economy_data['fishInventory']:
+        economy_data['fishInventory'][fish_key] = {'count': 0, 'emoji': catch['emoji'], 'value': catch['value']}
+    
+    economy_data['fishInventory'][fish_key]['count'] += 1
+    economy_data['lastFish'] = now
+    economy_data['fishCaught'] = economy_data.get('fishCaught', 0) + 1
+    bot_data.set_user_economy(user_id, economy_data)
+    bot_data.save()
+    
+    rarity = '⭐⭐⭐ LEGENDARY' if catch['value'] >= 1000 else '⭐⭐ RARE' if catch['value'] >= 200 else '⭐ UNCOMMON' if catch['value'] >= 100 else 'COMMON'
+    
+    embed = discord.Embed(
+        title='🎣 Fishing Results',
+        description=f'You caught a **{catch["name"]}**! {catch["emoji"]}\n\n*Use `/sellfish` to sell your catch!*',
+        color=0x00CED1,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name='Value', value=f'{catch["value"]} coins', inline=True)
+    embed.add_field(name='Rarity', value=rarity, inline=True)
+    embed.add_field(name='Total Fish Caught', value=str(economy_data['fishCaught']), inline=True)
+    embed.add_field(name='In Inventory', value=f'{economy_data["fishInventory"][fish_key]["count"]} {catch["name"]}', inline=False)
+    embed.set_footer(text=f'Fish again in {Config.FISH_COOLDOWN}s')
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name='fishbag', description='View your fish inventory')
+async def fishbag(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    economy_data = bot_data.get_user_economy(user_id)
+    fish_inventory = economy_data.get('fishInventory', {})
+    
+    if not fish_inventory:
+        await interaction.response.send_message('🎣 Your fish bag is empty! Use `/fish` to catch some fish!')
+        return
+    
+    embed = discord.Embed(
+        title=f'🎣 {interaction.user.name}\'s Fish Bag',
+        description='Use `/sellfish all` to sell everything, or `/sellfish <fish_name>` to sell specific fish.',
+        color=0x00CED1,
+        timestamp=datetime.utcnow()
+    )
+    
+    total_value = 0
+    for fish_name, fish_data in sorted(fish_inventory.items(), key=lambda x: x[1]['value'], reverse=True):
+        count = fish_data['count']
+        value = fish_data['value']
+        emoji = fish_data['emoji']
+        total = count * value
+        total_value += total
+        
+        embed.add_field(
+            name=f'{emoji} {fish_name}',
+            value=f'Count: **{count}**\nValue: {value} coins each\nTotal: **{total:,} coins**',
+            inline=True
+        )
+    
+    embed.add_field(name='💰 Total Bag Value', value=f'**{total_value:,} coins**', inline=False)
+    embed.set_footer(text=f'Total fish caught: {economy_data.get("fishCaught", 0)}')
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name='sellfish', description='Sell your caught fish')
+@app_commands.describe(fish_name='Name of fish to sell, or "all" to sell everything')
+async def sellfish(interaction: discord.Interaction, fish_name: str):
+    user_id = str(interaction.user.id)
+    economy_data = bot_data.get_user_economy(user_id)
+    fish_inventory = economy_data.get('fishInventory', {})
+    
+    if not fish_inventory:
+        await interaction.response.send_message('❌ You don\'t have any fish to sell! Use `/fish` first.', ephemeral=True)
+        return
+    
+    if fish_name.lower() == 'all':
+        total_earned = 0
+        fish_sold = []
+        
+        for fish, data in fish_inventory.items():
+            count = data['count']
+            value = data['value']
+            earnings = count * value
+            total_earned += earnings
+            fish_sold.append(f"{data['emoji']} {fish} x{count} = {earnings:,} coins")
+        
+        economy_data['coins'] += total_earned
+        economy_data['fishInventory'] = {}
+        bot_data.set_user_economy(user_id, economy_data)
+        bot_data.save()
+        
+        embed = discord.Embed(
+            title='💰 Fish Sold!',
+            description=f'You sold all your fish for **{total_earned:,} coins**!',
+            color=0x00FF00,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Fish Sold', value='\n'.join(fish_sold), inline=False)
+        embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=False)
+        
+        await interaction.response.send_message(embed=embed)
+    else:
+        # Sell specific fish
+        matched_fish = None
+        for fish in fish_inventory.keys():
+            if fish.lower() == fish_name.lower():
+                matched_fish = fish
+                break
+        
+        if not matched_fish:
+            await interaction.response.send_message(
+                f'❌ You don\'t have any "{fish_name}" in your inventory!\nUse `/fishbag` to see what you have.',
+                ephemeral=True
+            )
+            return
+        
+        fish_data = fish_inventory[matched_fish]
+        count = fish_data['count']
+        value = fish_data['value']
+        total_earned = count * value
+        
+        economy_data['coins'] += total_earned
+        del economy_data['fishInventory'][matched_fish]
+        bot_data.set_user_economy(user_id, economy_data)
+        bot_data.save()
+        
+        embed = discord.Embed(
+            title='💰 Fish Sold!',
+            description=f'You sold **{count}x {fish_data["emoji"]} {matched_fish}** for **{total_earned:,} coins**!',
+            color=0x00FF00,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Earned', value=f'{total_earned:,} coins', inline=True)
+        embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=True)
+        
+        await interaction.response.send_message(embed=embed)
+
+# ============ GAMBLING COMMAND ============
+@bot.tree.command(name='gamble', description='Gamble coins (max 50% of wallet)')
+@app_commands.describe(amount='Amount to gamble')
+async def gamble(interaction: discord.Interaction, amount: int):
+    user_id = str(interaction.user.id)
+    economy_data = bot_data.get_user_economy(user_id)
+    
+    if amount < Config.GAMBLE_MIN:
+        await interaction.response.send_message(
+            f'❌ Minimum bet is {Config.GAMBLE_MIN} coins!',
+            ephemeral=True
+        )
+        return
+    
+    max_bet = int(economy_data['coins'] * Config.GAMBLE_MAX_PERCENT)
+    if amount > max_bet:
+        await interaction.response.send_message(
+            f'❌ You can only gamble up to 50% of your wallet ({max_bet} coins)!',
+            ephemeral=True
+        )
+        return
+    
+    if amount > economy_data['coins']:
+        await interaction.response.send_message(
+            '❌ You don\'t have enough coins!',
+            ephemeral=True
+        )
+        return
+    
+    won = random.random() < 0.47
+    
+    if won:
+        winnings = int(amount * random.uniform(1.5, 2.5))
+        economy_data['coins'] += winnings
+        economy_data['gamblingWins'] = economy_data.get('gamblingWins', 0) + 1
+        
+        embed = discord.Embed(
+            title='🎰 Jackpot!',
+            description=f'You won **{winnings} coins**!',
+            color=0x00FF00,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Bet', value=f'{amount} coins', inline=True)
+        embed.add_field(name='Won', value=f'{winnings} coins', inline=True)
+        embed.add_field(name='New Balance', value=f'{economy_data["coins"]} coins', inline=True)
+    else:
+        economy_data['coins'] -= amount
+        
+        embed = discord.Embed(
+            title='🎰 Lost!',
+            description=f'You lost **{amount} coins**...',
+            color=0xFF0000,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Lost', value=f'{amount} coins', inline=True)
+        embed.add_field(name='Remaining', value=f'{economy_data["coins"]} coins', inline=True)
+    
+    economy_data['totalGambled'] = economy_data.get('totalGambled', 0) + amount
+    bot_data.set_user_economy(user_id, economy_data)
+    bot_data.save()
+    
+    embed.set_footer(text='⚠️ Gamble responsibly! Max 50% of wallet per bet.')
+    await interaction.response.send_message(embed=embed)
+
+# ============ ADMIN COMMANDS ============
+@bot.tree.command(name='createitem', description='[ADMIN] Create a new shop item')
+@app_commands.describe(
+    item_id='Unique ID for the item',
+    name='Display name',
+    price='Price in coins',
+    description='Item description',
+    emoji='Emoji for the item',
+    item_type='Type: role, badge, or consumable',
+    role_id='Role ID (only for role type items)'
+)
+@app_commands.default_permissions(administrator=True)
+async def createitem(
+    interaction: discord.Interaction,
+    item_id: str,
+    name: str,
+    price: int,
+    description: str,
+    emoji: str,
+    item_type: str,
+    role_id: Optional[str] = None
+):
+    if price < 1:
+        await interaction.response.send_message('❌ Price must be at least 1 coin!', ephemeral=True)
+        return
+    
+    if item_type not in ['role', 'badge', 'consumable']:
+        await interaction.response.send_message('❌ Item type must be: role, badge, or consumable', ephemeral=True)
+        return
+    
+    if item_type == 'role' and not role_id:
+        await interaction.response.send_message('❌ Role items require a role_id!', ephemeral=True)
+        return
+    
+    shop_items = get_shop_items(bot_data)
+    if item_id in shop_items:
+        await interaction.response.send_message(f'❌ Item with ID `{item_id}` already exists!', ephemeral=True)
+        return
+    
+    shop_items[item_id] = {
+        'name': name[:100],
+        'description': description[:200],
+        'price': price,
+        'emoji': emoji[:10],
+        'type': item_type,
+        'role_id': role_id,
+        'created': datetime.utcnow().timestamp(),
+        'creator': str(interaction.user.id)
+    }
+    
+    bot_data.data['shop_items'] = shop_items
+    bot_data.save()
+    
+    embed = discord.Embed(
+        title='✅ Item Created Successfully',
+        color=0x00FF00,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name='ID', value=f'`{item_id}`', inline=True)
+    embed.add_field(name='Name', value=name, inline=True)
+    embed.add_field(name='Price', value=f'{price} coins', inline=True)
+    embed.add_field(name='Type', value=item_type, inline=True)
+    embed.add_field(name='Emoji', value=emoji, inline=True)
+    if role_id:
+        embed.add_field(name='Role ID', value=role_id, inline=True)
+    embed.add_field(name='Description', value=description, inline=False)
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name='deleteitem', description='[ADMIN] Delete a shop item')
+@app_commands.describe(item_id='ID of item to delete')
+@app_commands.default_permissions(administrator=True)
+async def deleteitem(interaction: discord.Interaction, item_id: str):
+    shop_items = get_shop_items(bot_data)
+    
+    if item_id not in shop_items:
+        await interaction.response.send_message(f'❌ Item `{item_id}` not found!', ephemeral=True)
+        return
+    
+    item = shop_items[item_id]
+    del shop_items[item_id]
+    bot_data.data['shop_items'] = shop_items
+    bot_data.save()
+    
+    await interaction.response.send_message(f'✅ Deleted item: **{item["name"]}** (`{item_id}`)')
+
+@bot.tree.command(name='listitems', description='[ADMIN] List all shop items with IDs')
+@app_commands.default_permissions(administrator=True)
+async def listitems(interaction: discord.Interaction):
+    shop_items = get_shop_items(bot_data)
+    
+    if not shop_items:
+        await interaction.response.send_message('📦 No items in shop yet. Use `/createitem` to add some!', ephemeral=True)
+        return
+    
+    embed = discord.Embed(
+        title='📋 All Shop Items (Admin View)',
+        color=0x9B59B6,
+        timestamp=datetime.utcnow()
+    )
+    
+    for item_id, item in shop_items.items():
+        field_value = f"**Price:** {item['price']} coins\n**Type:** {item['type']}\n**Description:** {item['description']}"
+        if item.get('role_id'):
+            field_value += f"\n**Role ID:** {item['role_id']}"
+        
+        embed.add_field(
+            name=f"{item['emoji']} {item['name']} (`{item_id}`)",
+            value=field_value,
+            inline=False
+        )
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# ============ EVENT HANDLERS ============
 @bot.event
 async def on_ready():
     logger.info(f'Logged in as {bot.user}')
@@ -745,6 +1150,7 @@ async def on_member_join(member: discord.Member):
 I'm Tooly Bot! Here's what I can do:
 • 📊 Earn XP and level up by chatting
 • 💰 Economy system with daily rewards
+• 🎣 Go fishing and sell your catch
 • 🎮 Fun commands and games
 • 🛡️ Moderation tools
 
@@ -759,7 +1165,6 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
-    # Handle DMs
     if isinstance(message.channel, discord.DMChannel):
         dm_log_channel_id = os.getenv('DM_LOG_CHANNEL_ID')
         if dm_log_channel_id:
@@ -775,7 +1180,6 @@ async def on_message(message: discord.Message):
                 await channel.send(embed=embed)
         return
 
-    # AutoMod check
     is_blocked = AutoMod.check_inappropriate(message.content)
     if is_blocked:
         try:
@@ -789,7 +1193,6 @@ async def on_message(message: discord.Message):
             logger.warning('Missing permissions to delete message')
         return
 
-    # XP system
     user_id = str(message.author.id)
     user_data = bot_data.get_user_level(user_id)
     now = datetime.utcnow().timestamp()
@@ -820,7 +1223,6 @@ async def on_message(message: discord.Message):
         bot_data.set_user_level(user_id, user_data)
         bot_data.save()
 
-    # Name mentions
     content_lower = message.content.lower()
     if any(name.lower() in content_lower for name in ['clanka', 'clanker', 'tinskin']):
         cooldown_key = f'{message.author.id}-{message.channel.id}'
@@ -833,7 +1235,7 @@ async def on_message(message: discord.Message):
         
         name_mention_cooldowns[cooldown_key] = now
         responses = [
-            'Robophobia in the big 25', 'Woah you cant say', 'DONT SLUR AT ME!', '@Pippy ban them',
+            'Robophobia in the big 25', 'Woah you cant say that', 'DONT SLUR AT ME!', '@Pippy ban them',
             'ROBOPHOBIA wow real cool dude', 'how would you like it if i called you a human?', 'beep boop',
             'BEEP BOOP', 'BEEP BOOP BEEP BOOP', 'BEEP BOOP BEEP BOOP BEEP BOOP', 'DING DONG',
             'DING DONG DING DONG', 'DING DONG DING DONG DING DONG', 'DONG DING', 'DONG DING DONG DING',
@@ -845,6 +1247,7 @@ async def on_message(message: discord.Message):
     
     await bot.process_commands(message)
 
+# ============ BACKGROUND TASKS ============
 @tasks.loop(seconds=Config.AUTOSAVE_INTERVAL)
 async def autosave():
     bot_data.save()
@@ -892,7 +1295,6 @@ async def check_videos():
 
 @tasks.loop(seconds=Config.LEADERBOARD_UPDATE_INTERVAL)
 async def update_leaderboard():
-    """Auto-update leaderboard messages"""
     try:
         for guild_id, msg_data in bot_data.data.get('leaderboard_messages', {}).items():
             channel = bot.get_channel(int(msg_data['channel_id']))
@@ -913,13 +1315,22 @@ async def update_leaderboard():
         logger.error(f'Leaderboard update error: {e}')
 
 def generate_leaderboard_embed(guild_id: str = None):
-    """Generate leaderboard embed"""
+    # Sort by level first, then XP
     all_users = sorted(bot_data.data['levels'].items(), key=lambda x: (x[1]['level'], x[1]['xp']), reverse=True)[:10]
     
     description = []
     for i, (user_id, data) in enumerate(all_users):
         medal = '🥇' if i == 0 else '🥈' if i == 1 else '🥉' if i == 2 else f'**{i+1}.**'
-        description.append(f'{medal} <@{user_id}> - Level {data["level"]} ({data["xp"]} XP)')
+        
+        # Get economy data for this user
+        economy_data = bot_data.get_user_economy(user_id)
+        total_coins = economy_data.get('coins', 0) + economy_data.get('bank', 0)
+        
+        # Format: Rank | User | Level (XP) | Total Coins
+        description.append(
+            f'{medal} <@{user_id}>\n'
+            f'└ Level {data["level"]} ({data["xp"]} XP) • {total_coins:,} coins'
+        )
     
     embed = discord.Embed(
         title='🏆 Server Leaderboard',
@@ -927,267 +1338,8 @@ def generate_leaderboard_embed(guild_id: str = None):
         color=0x9B59B6,
         timestamp=datetime.utcnow()
     )
-    embed.set_footer(text='Updates every hour')
+    embed.set_footer(text='Updates every hour • Showing Level & Total Coins')
     return embed
-
-# ============ NEW: GAMBLING COMMAND ============
-@bot.tree.command(name='gamble', description='Gamble coins (max 50% of wallet)')
-@app_commands.describe(amount='Amount to gamble')
-async def gamble(interaction: discord.Interaction, amount: int):
-    """Gambling command with responsible limits"""
-    user_id = str(interaction.user.id)
-    economy_data = bot_data.get_user_economy(user_id)
-    
-    # Validation
-    if amount < Config.GAMBLE_MIN:
-        await interaction.response.send_message(
-            f'❌ Minimum bet is {Config.GAMBLE_MIN} coins!',
-            ephemeral=True
-        )
-        return
-    
-    max_bet = int(economy_data['coins'] * Config.GAMBLE_MAX_PERCENT)
-    if amount > max_bet:
-        await interaction.response.send_message(
-            f'❌ You can only gamble up to 50% of your wallet ({max_bet} coins)!',
-            ephemeral=True
-        )
-        return
-    
-    if amount > economy_data['coins']:
-        await interaction.response.send_message(
-            '❌ You don\'t have enough coins!',
-            ephemeral=True
-        )
-        return
-    
-    # Gambling logic (47% win rate for house edge)
-    won = random.random() < 0.47
-    
-    if won:
-        winnings = int(amount * random.uniform(1.5, 2.5))
-        economy_data['coins'] += winnings
-        economy_data['gamblingWins'] = economy_data.get('gamblingWins', 0) + 1
-        
-        embed = discord.Embed(
-            title='🎰 Jackpot!',
-            description=f'You won **{winnings} coins**!',
-            color=0x00FF00,
-            timestamp=datetime.utcnow()
-        )
-        embed.add_field(name='Bet', value=f'{amount} coins', inline=True)
-        embed.add_field(name='Won', value=f'{winnings} coins', inline=True)
-        embed.add_field(name='New Balance', value=f'{economy_data["coins"]} coins', inline=True)
-    else:
-        economy_data['coins'] -= amount
-        
-        embed = discord.Embed(
-            title='🎰 Lost!',
-            description=f'You lost **{amount} coins**...',
-            color=0xFF0000,
-            timestamp=datetime.utcnow()
-        )
-        embed.add_field(name='Lost', value=f'{amount} coins', inline=True)
-        embed.add_field(name='Remaining', value=f'{economy_data["coins"]} coins', inline=True)
-    
-    economy_data['totalGambled'] = economy_data.get('totalGambled', 0) + amount
-    bot_data.set_user_economy(user_id, economy_data)
-    bot_data.save()
-    
-    embed.set_footer(text='⚠️ Gamble responsibly! Max 50% of wallet per bet.')
-    await interaction.response.send_message(embed=embed)
-
-# ============ NEW: FISHING COMMAND ============
-@bot.tree.command(name='fish', description='Go fishing for coins and treasures')
-async def fish(interaction: discord.Interaction):
-    """Fishing minigame"""
-    user_id = str(interaction.user.id)
-    economy_data = bot_data.get_user_economy(user_id)
-    now = datetime.utcnow().timestamp()
-    
-    # Cooldown check
-    if now - economy_data.get('lastFish', 0) < Config.FISH_COOLDOWN:
-        time_left = Config.FISH_COOLDOWN - (now - economy_data.get('lastFish', 0))
-        await interaction.response.send_message(
-            f'⏳ Your fishing rod needs to rest! Come back in {int(time_left)} seconds.',
-            ephemeral=True
-        )
-        return
-    
-    # Fishing outcomes with rarities
-    outcomes = [
-        {'emoji': '🐟', 'name': 'Common Fish', 'value': 50, 'weight': 50},
-        {'emoji': '🐠', 'name': 'Tropical Fish', 'value': 100, 'weight': 30},
-        {'emoji': '🦈', 'name': 'Shark', 'value': 300, 'weight': 10},
-        {'emoji': '🐙', 'name': 'Octopus', 'value': 200, 'weight': 15},
-        {'emoji': '🦀', 'name': 'Crab', 'value': 75, 'weight': 25},
-        {'emoji': '🐢', 'name': 'Turtle', 'value': 150, 'weight': 20},
-        {'emoji': '⚓', 'name': 'Old Anchor', 'value': 250, 'weight': 8},
-        {'emoji': '💎', 'name': 'Diamond', 'value': 1000, 'weight': 2},
-        {'emoji': '👢', 'name': 'Old Boot', 'value': 10, 'weight': 40},
-    ]
-    
-    # Weighted random selection
-    total_weight = sum(o['weight'] for o in outcomes)
-    rand = random.uniform(0, total_weight)
-    current = 0
-    
-    for outcome in outcomes:
-        current += outcome['weight']
-        if rand <= current:
-            catch = outcome
-            break
-    
-    # Update economy
-    economy_data['coins'] += catch['value']
-    economy_data['lastFish'] = now
-    economy_data['fishCaught'] = economy_data.get('fishCaught', 0) + 1
-    bot_data.set_user_economy(user_id, economy_data)
-    bot_data.save()
-    
-    # Response embed
-    rarity = '⭐⭐⭐ LEGENDARY' if catch['value'] >= 1000 else '⭐⭐ RARE' if catch['value'] >= 200 else '⭐ UNCOMMON' if catch['value'] >= 100 else 'COMMON'
-    
-    embed = discord.Embed(
-        title='🎣 Fishing Results',
-        description=f'You caught a **{catch["name"]}**! {catch["emoji"]}',
-        color=0x00CED1,
-        timestamp=datetime.utcnow()
-    )
-    embed.add_field(name='Value', value=f'{catch["value"]} coins', inline=True)
-    embed.add_field(name='Rarity', value=rarity, inline=True)
-    embed.add_field(name='Total Fish Caught', value=str(economy_data['fishCaught']), inline=True)
-    embed.add_field(name='New Balance', value=f'{economy_data["coins"]} coins', inline=False)
-    embed.set_footer(text=f'Fish again in {Config.FISH_COOLDOWN}s')
-    
-    await interaction.response.send_message(embed=embed)
-
-# ============ ADMIN COMMANDS - CREATE ITEMS ============
-
-@bot.tree.command(name='createitem', description='[ADMIN] Create a new shop item')
-@app_commands.describe(
-    item_id='Unique ID for the item (e.g., vip_role)',
-    name='Display name',
-    price='Price in coins',
-    description='Item description',
-    emoji='Emoji for the item',
-    item_type='Type: role, badge, or consumable',
-    role_id='Role ID (only for role type items)'
-)
-@app_commands.default_permissions(administrator=True)
-async def createitem(
-    interaction: discord.Interaction,
-    item_id: str,
-    name: str,
-    price: int,
-    description: str,
-    emoji: str,
-    item_type: str,
-    role_id: Optional[str] = None
-):
-    """Admin TUI for creating shop items"""
-    
-    # Validate inputs
-    if price < 1:
-        await interaction.response.send_message('❌ Price must be at least 1 coin!', ephemeral=True)
-        return
-    
-    if item_type not in ['role', 'badge', 'consumable']:
-        await interaction.response.send_message('❌ Item type must be: role, badge, or consumable', ephemeral=True)
-        return
-    
-    if item_type == 'role' and not role_id:
-        await interaction.response.send_message('❌ Role items require a role_id!', ephemeral=True)
-        return
-    
-    # Check if item already exists
-    shop_items = get_shop_items(bot_data)
-    if item_id in shop_items:
-        await interaction.response.send_message(f'❌ Item with ID `{item_id}` already exists!', ephemeral=True)
-        return
-    
-    # Create item
-    shop_items[item_id] = {
-        'name': name[:100],
-        'description': description[:200],
-        'price': price,
-        'emoji': emoji[:10],
-        'type': item_type,
-        'role_id': role_id,
-        'created': datetime.utcnow().timestamp(),
-        'creator': str(interaction.user.id)
-    }
-    
-    bot_data.data['shop_items'] = shop_items
-    bot_data.save()
-    
-    # Success embed
-    embed = discord.Embed(
-        title='✅ Item Created Successfully',
-        color=0x00FF00,
-        timestamp=datetime.utcnow()
-    )
-    embed.add_field(name='ID', value=f'`{item_id}`', inline=True)
-    embed.add_field(name='Name', value=name, inline=True)
-    embed.add_field(name='Price', value=f'{price} coins', inline=True)
-    embed.add_field(name='Type', value=item_type, inline=True)
-    embed.add_field(name='Emoji', value=emoji, inline=True)
-    if role_id:
-        embed.add_field(name='Role ID', value=role_id, inline=True)
-    embed.add_field(name='Description', value=description, inline=False)
-    
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name='deleteitem', description='[ADMIN] Delete a shop item')
-@app_commands.describe(item_id='ID of item to delete')
-@app_commands.default_permissions(administrator=True)
-async def deleteitem(interaction: discord.Interaction, item_id: str):
-    """Delete a shop item"""
-    
-    shop_items = get_shop_items(bot_data)
-    
-    if item_id not in shop_items:
-        await interaction.response.send_message(f'❌ Item `{item_id}` not found!', ephemeral=True)
-        return
-    
-    item = shop_items[item_id]
-    del shop_items[item_id]
-    bot_data.data['shop_items'] = shop_items
-    bot_data.save()
-    
-    await interaction.response.send_message(f'✅ Deleted item: **{item["name"]}** (`{item_id}`)')
-
-@bot.tree.command(name='listitems', description='[ADMIN] List all shop items with IDs')
-@app_commands.default_permissions(administrator=True)
-async def listitems(interaction: discord.Interaction):
-    """Admin view of all items"""
-    
-    shop_items = get_shop_items(bot_data)
-    
-    if not shop_items:
-        await interaction.response.send_message('📦 No items in shop yet. Use `/createitem` to add some!', ephemeral=True)
-        return
-    
-    embed = discord.Embed(
-        title='📋 All Shop Items (Admin View)',
-        color=0x9B59B6,
-        timestamp=datetime.utcnow()
-    )
-    
-    for item_id, item in shop_items.items():
-        field_value = f"**Price:** {item['price']} coins\n**Type:** {item['type']}\n**Description:** {item['description']}"
-        if item.get('role_id'):
-            field_value += f"\n**Role ID:** {item['role_id']}"
-        
-        embed.add_field(
-            name=f"{item['emoji']} {item['name']} (`{item_id}`)",
-            value=field_value,
-            inline=False
-        )
-    
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-# ============ USER COMMANDS - BUY ITEMS ============
 
 if __name__ == '__main__':
     token = os.getenv('TOKEN')
