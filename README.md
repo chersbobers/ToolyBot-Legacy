@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Free](https://img.shields.io/badge/Free-100%25-success)](https://github.com/chersbobers/ToolyBot)
 [![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-red)](https://github.com/chersbobers/ToolyBot)
-
+[![Gif]](https://camo.githubusercontent.com/b1dcbf1c23a05137ae7c7fdf544082550382791048ee360022c288b87f022d6d/68747470733a2f2f692e67697068792e636f6d2f6d656469612f4c4d7439363338644f38646674416a74636f2f3230302e77656270)(100px, 100px)
 A completely free and open source Discord bot with leveling, economy, fishing, moderation, and more. Self-host it, customize it, make it yours.
 
 ## Features
