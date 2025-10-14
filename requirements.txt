@@ -1,9 +1,26 @@
-discord.py==2.3.2
+# Core Discord Library (Pycord)
+py-cord>=2.4.1
+
+# HTTP Requests
 aiohttp==3.9.1
+
+# RSS Feed Parser (for YouTube notifications)
 feedparser==6.0.10
+
+# Environment Variables
 python-dotenv==1.0.0
+
+# Web Scraping
 beautifulsoup4==4.12.2
+
+# Search Functionality
 duckduckgo-search==4.1.1
-yt-dlp==2023.12.30
+
+# Voice Support (optional)
 PyNaCl==1.5.0
-psutil
+
+# System Information
+psutil>=5.9.0
+
+# Additional utilities
+yt-dlp==2023.12.30
