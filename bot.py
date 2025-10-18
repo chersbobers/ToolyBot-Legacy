@@ -29,7 +29,7 @@ class Config:
     FISH_COOLDOWN = 120
     GAMBLE_MIN = 10
     GAMBLE_MAX_PERCENT = 0.5
-    GAMBLE_COOLDOWN = 180  # 3 minutes
+    GAMBLE_COOLDOWN = 0  # No cooldown
     NAME_MENTION_COOLDOWN = 30
     
     XP_MIN, XP_MAX = 10, 25
@@ -44,7 +44,7 @@ class Config:
     DATA_FILE = 'botdata.json'
     AUTOSAVE_INTERVAL = 300
     VIDEO_CHECK_INTERVAL = 300
-    LEADERBOARD_UPDATE_INTERVAL = 180 #3 mins
+    LEADERBOARD_UPDATE_INTERVAL = 3600
     SETTINGS_FILE = 'server_settings.json'
 
 class BotData:
@@ -423,23 +423,52 @@ async def rank(ctx, user: Optional[discord.Member] = None):
     target = user or ctx.author
     user_id = str(target.id)
     user_data = bot_data.get_user_level(user_id)
+    economy_data = bot_data.get_user_economy(user_id)
     xp_needed = user_data['level'] * Config.XP_PER_LEVEL
     
     all_users = sorted(bot_data.data['levels'].items(), key=lambda x: (x[1]['level'], x[1]['xp']), reverse=True)
     rank = next((i + 1 for i, (uid, _) in enumerate(all_users) if uid == user_id), 'Unranked')
     
-    embed = discord.Embed(
-        title=f'📊 {target.display_name}\'s Rank', 
-        color=0x9B59B6, 
-        timestamp=datetime.utcnow()
-    )
-    embed.set_thumbnail(url=target.display_avatar.url)
-    embed.add_field(name='🏆 Rank', value=f'#{rank}', inline=True)
-    embed.add_field(name='⭐ Level', value=str(user_data['level']), inline=True)
-    embed.add_field(name='✨ XP', value=f'{user_data["xp"]}/{xp_needed}', inline=True)
+    # Calculate progress percentage
+    progress_percent = int((user_data['xp'] / xp_needed) * 100) if xp_needed > 0 else 0
+    progress_bar = create_progress_bar(user_data['xp'], xp_needed, length=20)
     
-    progress_bar = create_progress_bar(user_data['xp'], xp_needed)
-    embed.add_field(name='Progress', value=progress_bar, inline=False)
+    # Determine rank color based on level
+    if user_data['level'] >= 50:
+        color = 0xFF6B6B  # Red for high levels
+    elif user_data['level'] >= 30:
+        color = 0xFFD93D  # Gold
+    elif user_data['level'] >= 15:
+        color = 0x6BCB77  # Green
+    else:
+        color = 0x4D96FF  # Blue
+    
+    embed = discord.Embed(color=color)
+    embed.set_author(name=f"{target.display_name}'s Profile", icon_url=target.display_avatar.url)
+    embed.set_thumbnail(url=target.display_avatar.url)
+    
+    # Main stats in description
+    embed.description = f"""
+**RANK** • #{rank} / {len(all_users)}
+**LEVEL** • {user_data['level']}
+**XP** • {user_data['xp']:,} / {xp_needed:,} ({progress_percent}%)
+
+{progress_bar}
+
+**💰 BALANCE** • {economy_data['coins']:,} coins
+    """
+    
+    # Additional stats
+    if economy_data.get('fishCaught', 0) > 0:
+        embed.add_field(name='🎣 Fish Caught', value=f"{economy_data['fishCaught']:,}", inline=True)
+    
+    if economy_data.get('gamblingWins', 0) > 0:
+        total_games = economy_data.get('gamblingWins', 0) + economy_data.get('gamblingLosses', 0)
+        win_rate = (economy_data['gamblingWins'] / total_games * 100) if total_games > 0 else 0
+        embed.add_field(name='🎰 Win Rate', value=f"{win_rate:.1f}%", inline=True)
+    
+    embed.set_footer(text=f"Requested by {ctx.author.name}")
+    embed.timestamp = datetime.utcnow()
     
     await ctx.respond(embed=embed)
 
@@ -835,15 +864,6 @@ async def gamble(ctx, game: str, amount: int):
     economy_data = bot_data.get_user_economy(user_id)
     now = datetime.utcnow().timestamp()
     
-    # Cooldown check
-    if now - economy_data.get('lastGamble', 0) < Config.GAMBLE_COOLDOWN:
-        time_left = Config.GAMBLE_COOLDOWN - (now - economy_data.get('lastGamble', 0))
-        await ctx.respond(
-            f'⏳ Gambling cooldown! Wait **{int(time_left)}s** before gambling again.',
-            ephemeral=True
-        )
-        return
-    
     # Validation
     max_bet = int(economy_data['coins'] * Config.GAMBLE_MAX_PERCENT)
     if amount > max_bet:
@@ -856,9 +876,6 @@ async def gamble(ctx, game: str, amount: int):
     if amount > economy_data['coins']:
         await ctx.respond('❌ You don\'t have enough coins!', ephemeral=True)
         return
-    
-    # Update cooldown
-    economy_data['lastGamble'] = now
     
     # Play the selected game
     if game == 'slots':
@@ -895,7 +912,7 @@ async def gamble(ctx, game: str, amount: int):
     
     # Create result embed
     embed = result['embed']
-    embed.set_footer(text=f'⚠️ Gamble responsibly! Cooldown: {Config.GAMBLE_COOLDOWN}s | Win Streak: {economy_data["currentStreak"]}')
+    embed.set_footer(text=f'⚠️ Gamble responsibly! Win Streak: {economy_data["currentStreak"]}')
     
     await ctx.respond(embed=embed)
 
@@ -1161,49 +1178,35 @@ async def botinfo(ctx):
     
     process = psutil.Process()
     memory_usage = process.memory_info().rss / 1024 / 1024
-    cpu_usage = process.cpu_percent()
     
     embed = discord.Embed(
-        title='🤖 Tooly Bot Information',
-        description='A feature-rich Discord bot with leveling, economy, fishing, gambling, moderation, and more!',
+        title='🤖 Tooly Bot',
+        description='A feature-rich Discord bot with leveling, economy, fishing, and gambling!',
         color=0x9B59B6,
         timestamp=datetime.utcnow()
     )
     
-    embed.add_field(name='🤖 Bot Name', value=bot.user.name, inline=True)
-    embed.add_field(name='🆔 Bot ID', value=str(bot.user.id), inline=True)
-    embed.add_field(name='📅 Created', value=bot.user.created_at.strftime('%Y-%m-%d'), inline=True)
-    
-    embed.add_field(name='🔧 Version', value='**Beta 2.1** (Enhanced Pycord)', inline=True)
-    embed.add_field(name='🐍 Python', value=f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}', inline=True)
-    embed.add_field(name='📚 Py-cord', value=discord.__version__, inline=True)
-    
+    # Stats
     embed.add_field(name='📊 Servers', value=f'{total_guilds:,}', inline=True)
-    embed.add_field(name='👥 Tracked Users', value=f'{total_users:,}', inline=True)
-    embed.add_field(name='💰 Total Economy', value=f'{total_coins:,} coins', inline=True)
+    embed.add_field(name='👥 Users', value=f'{total_users:,}', inline=True)
+    embed.add_field(name='💰 Economy', value=f'{total_coins:,}', inline=True)
     
-    embed.add_field(name='💻 Hosting', value='Render Cloud', inline=True)
-    embed.add_field(name='🧠 RAM Usage', value=f'{memory_usage:.1f} MB', inline=True)
-    embed.add_field(name='⚡ CPU Usage', value=f'{cpu_usage:.1f}%', inline=True)
-    
-    features = [
-        '✅ XP & Leveling System',
-        '✅ Economy with Shop',
-        '✅ Enhanced Fishing (18 fish types!)',
-        '✅ Fish Selling System',
-        '✅ 4 Gambling Games (Slots, Dice, Coinflip, Roulette)',
-        '✅ Gambling Statistics Tracking',
-        '✅ Auto-Moderation',
-        '✅ YouTube Notifications',
-        '✅ Auto-Updating Leaderboards'
-    ]
-    embed.add_field(name='🎯 Features', value='\n'.join(features), inline=False)
-    
-    embed.add_field(name='⚙️ Commands', value=f'{total_commands} slash commands', inline=True)
+    embed.add_field(name='⚙️ Commands', value=f'{total_commands}', inline=True)
     embed.add_field(name='🏓 Latency', value=f'{round(bot.latency * 1000)}ms', inline=True)
-    embed.add_field(name='📈 Status', value='✅ Online', inline=True)
+    embed.add_field(name='🧠 Memory', value=f'{memory_usage:.0f} MB', inline=True)
     
-    embed.set_footer(text='Made with ❤️ by chersbobers | Enhanced Pycord Edition')
+    # Features
+    features = [
+        '⭐ XP & Leveling',
+        '💵 Economy & Shop',
+        '🎣 Fishing (18 types)',
+        '🎰 4 Gambling Games',
+        '🛡️ Auto-Moderation',
+        '📺 YouTube Alerts'
+    ]
+    embed.add_field(name='✨ Features', value='\n'.join(features), inline=False)
+    
+    embed.set_footer(text='Made with ❤️ by chersbobers')
     
     if bot.user.avatar:
         embed.set_thumbnail(url=bot.user.avatar.url)
@@ -1482,12 +1485,15 @@ async def purge(ctx, amount: int):
         logger.error(f'Purge error: {e}')
 
 # ============ HELPER FUNCTIONS ============
-def create_progress_bar(current: int, total: int, length: int = 10) -> str:
+def create_progress_bar(current: int, total: int, length: int = 20) -> str:
     """Create a visual progress bar"""
+    if total == 0:
+        return '░' * length + ' 0%'
+    
     filled = int((current / total) * length)
     bar = '█' * filled + '░' * (length - filled)
     percentage = int((current / total) * 100)
-    return f'{bar} {percentage}%'
+    return f'`{bar}` {percentage}%'
 
 def generate_leaderboard_embed(guild_id: str = None):
     """Generate leaderboard embed"""
@@ -1524,7 +1530,7 @@ async def on_ready():
     await bot.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.watching,
-            name="for /help | Enhanced with 4 Gambling Games!"
+            name="for /help | Tooly Bot"
         )
     )
     
@@ -1773,5 +1779,5 @@ if __name__ == '__main__':
         logger.error('❌ TOKEN environment variable not set!')
         exit(1)
     
-    logger.info('🚀 Starting Tooly Bot (Enhanced Pycord Edition)...')
+    logger.info('🚀 Starting Tooly Bot...')
     bot.run(token)
