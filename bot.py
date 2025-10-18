@@ -44,7 +44,7 @@ class Config:
     DATA_FILE = 'botdata.json'
     AUTOSAVE_INTERVAL = 300
     VIDEO_CHECK_INTERVAL = 300
-    LEADERBOARD_UPDATE_INTERVAL = 3600
+    LEADERBOARD_UPDATE_INTERVAL = 180 #3 mins
     SETTINGS_FILE = 'server_settings.json'
 
 class BotData:
