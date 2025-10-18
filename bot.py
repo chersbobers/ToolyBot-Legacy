@@ -29,6 +29,7 @@ class Config:
     FISH_COOLDOWN = 120
     GAMBLE_MIN = 10
     GAMBLE_MAX_PERCENT = 0.5
+    GAMBLE_COOLDOWN = 180  # 3 minutes
     NAME_MENTION_COOLDOWN = 30
     
     XP_MIN, XP_MAX = 10, 25
@@ -87,9 +88,15 @@ class BotData:
             'lastDaily': 0, 
             'lastWork': 0,
             'lastFish': 0,
+            'lastGamble': 0,
             'fishCaught': 0,
             'totalGambled': 0,
             'gamblingWins': 0,
+            'gamblingLosses': 0,
+            'biggestWin': 0,
+            'biggestLoss': 0,
+            'winStreak': 0,
+            'currentStreak': 0,
             'fishInventory': {}
         })
     
@@ -208,6 +215,36 @@ FISH_TYPES = [
     {'emoji': '👢', 'name': 'Old Boot', 'value': 10, 'weight': 40},
     {'emoji': '🥫', 'name': 'Tin Can', 'value': 5, 'weight': 35},
 ]
+
+# ============ GAMBLING GAME TYPES ============
+GAMBLE_GAMES = {
+    'slots': {
+        'name': '🎰 Slot Machine',
+        'symbols': ['🍒', '🍋', '🍊', '🍇', '💎', '7️⃣'],
+        'payouts': {
+            3: 5.0,  # 3 matching symbols = 5x
+            2: 2.0,  # 2 matching symbols = 2x
+        }
+    },
+    'dice': {
+        'name': '🎲 Dice Roll',
+        'win_rate': 0.48,
+        'multiplier_range': (1.5, 2.8)
+    },
+    'coinflip': {
+        'name': '🪙 Coin Flip',
+        'win_rate': 0.49,
+        'multiplier': 2.0
+    },
+    'roulette': {
+        'name': '🎡 Roulette',
+        'colors': ['🔴', '⚫', '🟢'],
+        'payouts': {
+            'color': 2.0,
+            'green': 14.0
+        }
+    }
+}
 
 # ============ FUN COMMANDS ============
 @bot.slash_command(name='flip', description='Flip a coin')
@@ -363,6 +400,21 @@ async def joke(ctx):
 async def roll(ctx):
     result = random.randint(1, 6)
     await ctx.respond(f'🎲 You rolled a **{result}**!')
+
+@bot.slash_command(name='yotsuba', description='Get a Yotsuba image')
+async def yotsuba(ctx):
+    embed = discord.Embed(
+        title='🍀 Yotsuba!',
+        description='Here\'s a Yotsuba image!',
+        color=0x77DD77,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_image(url='https://i.ibb.co/BDhQV8B/yotsuba.jpg')
+    await ctx.respond(embed=embed)
+
+@bot.slash_command(name='hello', description='Say hello to the bot')
+async def hello(ctx):
+    await ctx.respond(f'Hello {ctx.author.mention}! 👋 I\'m Tooly Bot!')
 
 # ============ LEVEL COMMANDS ============
 @bot.slash_command(name='rank', description='Check your rank and level')
@@ -774,13 +826,25 @@ async def sellfish(ctx, fish_name: str):
         
         await ctx.respond(embed=embed)
 
-# ============ GAMBLING COMMAND ============
-@bot.slash_command(name='gamble', description='Gamble coins (max 50% of wallet)')
+# ============ ENHANCED GAMBLING COMMANDS ============
+@bot.slash_command(name='gamble', description='Play various gambling games (max 50% of wallet)')
+@option("game", description="Game type", choices=["slots", "dice", "coinflip", "roulette"])
 @option("amount", description="Amount to gamble", min_value=Config.GAMBLE_MIN)
-async def gamble(ctx, amount: int):
+async def gamble(ctx, game: str, amount: int):
     user_id = str(ctx.author.id)
     economy_data = bot_data.get_user_economy(user_id)
+    now = datetime.utcnow().timestamp()
     
+    # Cooldown check
+    if now - economy_data.get('lastGamble', 0) < Config.GAMBLE_COOLDOWN:
+        time_left = Config.GAMBLE_COOLDOWN - (now - economy_data.get('lastGamble', 0))
+        await ctx.respond(
+            f'⏳ Gambling cooldown! Wait **{int(time_left)}s** before gambling again.',
+            ephemeral=True
+        )
+        return
+    
+    # Validation
     max_bet = int(economy_data['coins'] * Config.GAMBLE_MAX_PERCENT)
     if amount > max_bet:
         await ctx.respond(
@@ -793,40 +857,265 @@ async def gamble(ctx, amount: int):
         await ctx.respond('❌ You don\'t have enough coins!', ephemeral=True)
         return
     
-    won = random.random() < 0.47
+    # Update cooldown
+    economy_data['lastGamble'] = now
     
-    if won:
-        winnings = int(amount * random.uniform(1.5, 2.5))
-        economy_data['coins'] += winnings
+    # Play the selected game
+    if game == 'slots':
+        result = play_slots(amount)
+    elif game == 'dice':
+        result = play_dice(amount)
+    elif game == 'coinflip':
+        result = play_coinflip(amount)
+    elif game == 'roulette':
+        result = play_roulette(amount)
+    
+    # Update economy
+    if result['won']:
+        economy_data['coins'] += result['winnings']
         economy_data['gamblingWins'] = economy_data.get('gamblingWins', 0) + 1
+        economy_data['currentStreak'] = economy_data.get('currentStreak', 0) + 1
         
-        embed = discord.Embed(
-            title='🎰 Jackpot!',
-            description=f'You won **{winnings:,} coins**!',
-            color=0x00FF00,
-            timestamp=datetime.utcnow()
-        )
-        embed.add_field(name='Bet', value=f'{amount:,} coins', inline=True)
-        embed.add_field(name='Won', value=f'{winnings:,} coins', inline=True)
-        embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=True)
+        if economy_data['currentStreak'] > economy_data.get('winStreak', 0):
+            economy_data['winStreak'] = economy_data['currentStreak']
+        
+        if result['winnings'] > economy_data.get('biggestWin', 0):
+            economy_data['biggestWin'] = result['winnings']
     else:
         economy_data['coins'] -= amount
+        economy_data['gamblingLosses'] = economy_data.get('gamblingLosses', 0) + 1
+        economy_data['currentStreak'] = 0
         
-        embed = discord.Embed(
-            title='🎰 Lost!',
-            description=f'You lost **{amount:,} coins**...',
-            color=0xFF0000,
-            timestamp=datetime.utcnow()
-        )
-        embed.add_field(name='Lost', value=f'{amount:,} coins', inline=True)
-        embed.add_field(name='Remaining', value=f'{economy_data["coins"]:,} coins', inline=True)
+        if amount > economy_data.get('biggestLoss', 0):
+            economy_data['biggestLoss'] = amount
     
     economy_data['totalGambled'] = economy_data.get('totalGambled', 0) + amount
     bot_data.set_user_economy(user_id, economy_data)
     bot_data.save()
     
-    embed.set_footer(text='⚠️ Gamble responsibly! Max 50% of wallet per bet.')
+    # Create result embed
+    embed = result['embed']
+    embed.set_footer(text=f'⚠️ Gamble responsibly! Cooldown: {Config.GAMBLE_COOLDOWN}s | Win Streak: {economy_data["currentStreak"]}')
+    
     await ctx.respond(embed=embed)
+
+@bot.slash_command(name='gamblestats', description='View your gambling statistics')
+@option("user", discord.Member, description="User to check (optional)", required=False)
+async def gamblestats(ctx, user: Optional[discord.Member] = None):
+    target = user or ctx.author
+    user_id = str(target.id)
+    economy_data = bot_data.get_user_economy(user_id)
+    
+    total_games = economy_data.get('gamblingWins', 0) + economy_data.get('gamblingLosses', 0)
+    
+    if total_games == 0:
+        await ctx.respond(f'❌ {target.display_name} hasn\'t gambled yet!')
+        return
+    
+    win_rate = (economy_data.get('gamblingWins', 0) / total_games) * 100
+    
+    embed = discord.Embed(
+        title=f'🎰 {target.display_name}\'s Gambling Stats',
+        color=0xFF69B4,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    
+    embed.add_field(name='🎮 Total Games', value=f'{total_games:,}', inline=True)
+    embed.add_field(name='✅ Wins', value=f'{economy_data.get("gamblingWins", 0):,}', inline=True)
+    embed.add_field(name='❌ Losses', value=f'{economy_data.get("gamblingLosses", 0):,}', inline=True)
+    
+    embed.add_field(name='📊 Win Rate', value=f'{win_rate:.1f}%', inline=True)
+    embed.add_field(name='🔥 Best Streak', value=f'{economy_data.get("winStreak", 0):,}', inline=True)
+    embed.add_field(name='⚡ Current Streak', value=f'{economy_data.get("currentStreak", 0):,}', inline=True)
+    
+    embed.add_field(name='💰 Total Gambled', value=f'{economy_data.get("totalGambled", 0):,} coins', inline=True)
+    embed.add_field(name='🏆 Biggest Win', value=f'{economy_data.get("biggestWin", 0):,} coins', inline=True)
+    embed.add_field(name='💔 Biggest Loss', value=f'{economy_data.get("biggestLoss", 0):,} coins', inline=True)
+    
+    await ctx.respond(embed=embed)
+
+def play_slots(bet: int) -> dict:
+    """Play slot machine game"""
+    game = GAMBLE_GAMES['slots']
+    symbols = game['symbols']
+    
+    result = [random.choice(symbols) for _ in range(3)]
+    
+    # Check for wins
+    if result[0] == result[1] == result[2]:
+        # Three of a kind
+        multiplier = game['payouts'][3]
+        winnings = int(bet * multiplier)
+        
+        embed = discord.Embed(
+            title='🎰 JACKPOT! 🎰',
+            description=f'{result[0]} {result[1]} {result[2]}\n\n**THREE OF A KIND!**',
+            color=0xFFD700,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Bet', value=f'{bet:,} coins', inline=True)
+        embed.add_field(name='Won', value=f'{winnings:,} coins', inline=True)
+        embed.add_field(name='Multiplier', value=f'{multiplier}x', inline=True)
+        
+        return {'won': True, 'winnings': winnings, 'embed': embed}
+    
+    elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
+        # Two of a kind
+        multiplier = game['payouts'][2]
+        winnings = int(bet * multiplier)
+        
+        embed = discord.Embed(
+            title='🎰 Winner!',
+            description=f'{result[0]} {result[1]} {result[2]}\n\n**TWO OF A KIND!**',
+            color=0x00FF00,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Bet', value=f'{bet:,} coins', inline=True)
+        embed.add_field(name='Won', value=f'{winnings:,} coins', inline=True)
+        embed.add_field(name='Multiplier', value=f'{multiplier}x', inline=True)
+        
+        return {'won': True, 'winnings': winnings, 'embed': embed}
+    
+    else:
+        # Loss
+        embed = discord.Embed(
+            title='🎰 No Match',
+            description=f'{result[0]} {result[1]} {result[2]}\n\nBetter luck next time!',
+            color=0xFF0000,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Lost', value=f'{bet:,} coins', inline=True)
+        
+        return {'won': False, 'winnings': 0, 'embed': embed}
+
+def play_dice(bet: int) -> dict:
+    """Play dice roll game"""
+    game = GAMBLE_GAMES['dice']
+    
+    player_roll = random.randint(1, 6)
+    house_roll = random.randint(1, 6)
+    
+    if player_roll > house_roll:
+        multiplier = random.uniform(*game['multiplier_range'])
+        winnings = int(bet * multiplier)
+        
+        embed = discord.Embed(
+            title='🎲 Dice Roll - YOU WIN!',
+            description=f'Your Roll: **{player_roll}** 🎲\nHouse Roll: **{house_roll}** 🎲',
+            color=0x00FF00,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Bet', value=f'{bet:,} coins', inline=True)
+        embed.add_field(name='Won', value=f'{winnings:,} coins', inline=True)
+        embed.add_field(name='Multiplier', value=f'{multiplier:.2f}x', inline=True)
+        
+        return {'won': True, 'winnings': winnings, 'embed': embed}
+    
+    elif player_roll == house_roll:
+        embed = discord.Embed(
+            title='🎲 Dice Roll - TIE!',
+            description=f'Your Roll: **{player_roll}** 🎲\nHouse Roll: **{house_roll}** 🎲\n\nYour bet is returned!',
+            color=0xFFA500,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Bet Returned', value=f'{bet:,} coins', inline=True)
+        
+        return {'won': True, 'winnings': 0, 'embed': embed}
+    
+    else:
+        embed = discord.Embed(
+            title='🎲 Dice Roll - YOU LOSE',
+            description=f'Your Roll: **{player_roll}** 🎲\nHouse Roll: **{house_roll}** 🎲',
+            color=0xFF0000,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Lost', value=f'{bet:,} coins', inline=True)
+        
+        return {'won': False, 'winnings': 0, 'embed': embed}
+
+def play_coinflip(bet: int) -> dict:
+    """Play coin flip game"""
+    game = GAMBLE_GAMES['coinflip']
+    
+    player_choice = random.choice(['Heads', 'Tails'])
+    result = random.choice(['Heads', 'Tails'])
+    
+    if player_choice == result:
+        winnings = int(bet * game['multiplier'])
+        
+        embed = discord.Embed(
+            title='🪙 Coin Flip - YOU WIN!',
+            description=f'You chose: **{player_choice}**\nResult: **{result}**',
+            color=0x00FF00,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Bet', value=f'{bet:,} coins', inline=True)
+        embed.add_field(name='Won', value=f'{winnings:,} coins', inline=True)
+        embed.add_field(name='Multiplier', value=f'{game["multiplier"]}x', inline=True)
+        
+        return {'won': True, 'winnings': winnings, 'embed': embed}
+    
+    else:
+        embed = discord.Embed(
+            title='🪙 Coin Flip - YOU LOSE',
+            description=f'You chose: **{player_choice}**\nResult: **{result}**',
+            color=0xFF0000,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Lost', value=f'{bet:,} coins', inline=True)
+        
+        return {'won': False, 'winnings': 0, 'embed': embed}
+
+def play_roulette(bet: int) -> dict:
+    """Play roulette game"""
+    game = GAMBLE_GAMES['roulette']
+    colors = game['colors']
+    
+    player_choice = random.choice(colors)
+    result = random.choice(colors)
+    
+    # Green is rare jackpot
+    if result == '🟢':
+        winnings = int(bet * game['payouts']['green'])
+        
+        embed = discord.Embed(
+            title='🎡 Roulette - JACKPOT! 🎡',
+            description=f'Result: **GREEN** 🟢\n\n**MEGA WIN!**',
+            color=0xFFD700,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Bet', value=f'{bet:,} coins', inline=True)
+        embed.add_field(name='Won', value=f'{winnings:,} coins', inline=True)
+        embed.add_field(name='Multiplier', value=f'{game["payouts"]["green"]}x', inline=True)
+        
+        return {'won': True, 'winnings': winnings, 'embed': embed}
+    
+    elif player_choice == result:
+        winnings = int(bet * game['payouts']['color'])
+        
+        embed = discord.Embed(
+            title='🎡 Roulette - YOU WIN!',
+            description=f'You chose: {player_choice}\nResult: {result}',
+            color=0x00FF00,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Bet', value=f'{bet:,} coins', inline=True)
+        embed.add_field(name='Won', value=f'{winnings:,} coins', inline=True)
+        embed.add_field(name='Multiplier', value=f'{game["payouts"]["color"]}x', inline=True)
+        
+        return {'won': True, 'winnings': winnings, 'embed': embed}
+    
+    else:
+        embed = discord.Embed(
+            title='🎡 Roulette - YOU LOSE',
+            description=f'You chose: {player_choice}\nResult: {result}',
+            color=0xFF0000,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Lost', value=f'{bet:,} coins', inline=True)
+        
+        return {'won': False, 'winnings': 0, 'embed': embed}
 
 # ============ INFO COMMANDS ============
 @bot.slash_command(name='ping', description='Check bot latency')
@@ -876,7 +1165,7 @@ async def botinfo(ctx):
     
     embed = discord.Embed(
         title='🤖 Tooly Bot Information',
-        description='A feature-rich Discord bot with leveling, economy, fishing, moderation, and more!',
+        description='A feature-rich Discord bot with leveling, economy, fishing, gambling, moderation, and more!',
         color=0x9B59B6,
         timestamp=datetime.utcnow()
     )
@@ -885,7 +1174,7 @@ async def botinfo(ctx):
     embed.add_field(name='🆔 Bot ID', value=str(bot.user.id), inline=True)
     embed.add_field(name='📅 Created', value=bot.user.created_at.strftime('%Y-%m-%d'), inline=True)
     
-    embed.add_field(name='🔧 Version', value='**Beta 2.0** (Pycord)', inline=True)
+    embed.add_field(name='🔧 Version', value='**Beta 2.1** (Enhanced Pycord)', inline=True)
     embed.add_field(name='🐍 Python', value=f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}', inline=True)
     embed.add_field(name='📚 Py-cord', value=discord.__version__, inline=True)
     
@@ -902,7 +1191,8 @@ async def botinfo(ctx):
         '✅ Economy with Shop',
         '✅ Enhanced Fishing (18 fish types!)',
         '✅ Fish Selling System',
-        '✅ Gambling Minigame',
+        '✅ 4 Gambling Games (Slots, Dice, Coinflip, Roulette)',
+        '✅ Gambling Statistics Tracking',
         '✅ Auto-Moderation',
         '✅ YouTube Notifications',
         '✅ Auto-Updating Leaderboards'
@@ -913,7 +1203,7 @@ async def botinfo(ctx):
     embed.add_field(name='🏓 Latency', value=f'{round(bot.latency * 1000)}ms', inline=True)
     embed.add_field(name='📈 Status', value='✅ Online', inline=True)
     
-    embed.set_footer(text='Made with ❤️ by chersbobers | Migrated to Pycord')
+    embed.set_footer(text='Made with ❤️ by chersbobers | Enhanced Pycord Edition')
     
     if bot.user.avatar:
         embed.set_thumbnail(url=bot.user.avatar.url)
@@ -1163,6 +1453,34 @@ async def listitems(ctx):
     
     await ctx.respond(embed=embed, ephemeral=True)
 
+@bot.slash_command(name='purge', description='[MOD] Delete multiple messages')
+@option("amount", description="Number of messages to delete (1-100)", min_value=1, max_value=100)
+@discord.default_permissions(manage_messages=True)
+async def purge(ctx, amount: int):
+    """Bulk delete messages from a channel"""
+    await ctx.defer(ephemeral=True)
+    
+    try:
+        deleted = await ctx.channel.purge(limit=amount)
+        
+        embed = discord.Embed(
+            title='🗑️ Messages Purged',
+            description=f'Successfully deleted **{len(deleted)}** messages!',
+            color=0x00FF00,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='Channel', value=ctx.channel.mention, inline=True)
+        embed.add_field(name='Moderator', value=ctx.author.mention, inline=True)
+        
+        await ctx.followup.send(embed=embed, ephemeral=True)
+        logger.info(f'🗑️ {ctx.author} purged {len(deleted)} messages in {ctx.channel}')
+        
+    except discord.Forbidden:
+        await ctx.followup.send('❌ I don\'t have permission to delete messages in this channel!', ephemeral=True)
+    except discord.HTTPException as e:
+        await ctx.followup.send(f'❌ Failed to delete messages: {str(e)}', ephemeral=True)
+        logger.error(f'Purge error: {e}')
+
 # ============ HELPER FUNCTIONS ============
 def create_progress_bar(current: int, total: int, length: int = 10) -> str:
     """Create a visual progress bar"""
@@ -1206,7 +1524,7 @@ async def on_ready():
     await bot.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.watching,
-            name="for /help | Made with Pycord"
+            name="for /help | Enhanced with 4 Gambling Games!"
         )
     )
     
@@ -1247,12 +1565,13 @@ async def on_member_join(member: discord.Member):
 
 I'm Tooly Bot! Here's what I can do:
 • 📊 Earn XP and level up by chatting
-• 💰 Economy system with daily rewards
-• 🎣 Go fishing and sell your catch
+• 💰 Economy system with daily rewards & work
+• 🎣 Go fishing and sell your catch (18 fish types!)
+• 🎰 Play 4 gambling games: Slots, Dice, Coinflip, Roulette
 • 🎮 Fun commands and games
 • 🛡️ Moderation tools
 
-Use `/help` or `/botinfo` to learn more!"""
+Use `/botinfo` to learn more about all features!"""
     
     try:
         await member.send(welcome_msg)
@@ -1454,5 +1773,5 @@ if __name__ == '__main__':
         logger.error('❌ TOKEN environment variable not set!')
         exit(1)
     
-    logger.info('🚀 Starting Tooly Bot (Pycord Edition)...')
+    logger.info('🚀 Starting Tooly Bot (Enhanced Pycord Edition)...')
     bot.run(token)
