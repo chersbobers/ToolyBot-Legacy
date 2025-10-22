@@ -1519,7 +1519,7 @@ def generate_leaderboard_embed(guild_id: str = None):
     )
     embed.set_footer(text='Updates every hour • Showing Level & Total Coins')
     return embed
-
+ 
 # ============ EVENT HANDLERS ============
 @bot.event
 async def on_ready():
