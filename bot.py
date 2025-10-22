@@ -1167,10 +1167,6 @@ async def serverinfo(ctx):
 
 @bot.slash_command(name='botinfo', description='Show detailed bot information')
 async def botinfo(ctx):
-    import platform
-    import psutil
-    import sys
-    
     total_users = len(bot_data.data.get('levels', {}))
     total_coins = sum(e.get('coins', 0) + e.get('bank', 0) for e in bot_data.data.get('economy', {}).values())
     total_guilds = len(bot.guilds)
@@ -1178,7 +1174,16 @@ async def botinfo(ctx):
     
     process = psutil.Process()
     memory_usage = process.memory_info().rss / 1024 / 1024
-    
+
+    # Fetch the latest version from GitHub
+    async with aiohttp.ClientSession() as session:
+        async with session.get('https://api.github.com/repos/chersbobers/ToolyBot/releases/latest') as response:
+            if response.status == 200:
+                latest_release = await response.json()
+                latest_version = latest_release['tag_name']
+            else:
+                latest_version = 'Unavailable'
+
     embed = discord.Embed(
         title='🤖 Tooly Bot',
         description='A feature-rich Discord bot with leveling, economy, fishing, and gambling!',
@@ -1194,7 +1199,10 @@ async def botinfo(ctx):
     embed.add_field(name='⚙️ Commands', value=f'{total_commands}', inline=True)
     embed.add_field(name='🏓 Latency', value=f'{round(bot.latency * 1000)}ms', inline=True)
     embed.add_field(name='🧠 Memory', value=f'{memory_usage:.0f} MB', inline=True)
-    
+
+    # Version Check
+    embed.add_field(name='🔍 Version', value=f'Latest Version: **{latest_version}**\n[Check on GitHub](https://github.com/chersbobers/ToolyBot/releases)', inline=False)
+
     # Features
     features = [
         '⭐ XP & Leveling',
@@ -1519,7 +1527,7 @@ def generate_leaderboard_embed(guild_id: str = None):
     )
     embed.set_footer(text='Updates every hour • Showing Level & Total Coins')
     return embed
- 
+  
 # ============ EVENT HANDLERS ============
 @bot.event
 async def on_ready():
