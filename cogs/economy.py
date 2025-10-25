@@ -243,7 +243,7 @@ class Economy(commands.Cog):
 
         await ctx.respond(embed=embed)
 
-    @discord.slash_command(name='give', description='Give coins to a user or everyone (Admin only)')
+@discord.slash_command(name='give', description='Give coins to a user or everyone (Admin only)')
 @discord.default_permissions(administrator=True)
 @option("user", discord.Member, description="User to give coins to (ignored if 'everyone' is true)", required=False)
 @option("everyone", bool, description="Give to everyone in the server", required=False, default=False)
