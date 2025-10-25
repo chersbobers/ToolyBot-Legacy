@@ -7,7 +7,6 @@ import random
 import logging
 from utils.database import bot_data
 from utils.config import Config
-
 logger = logging.getLogger('tooly_bot.economy')
 
 class Economy(commands.Cog):
@@ -148,7 +147,7 @@ class Economy(commands.Cog):
         await ctx.respond(embed=embed)
     
     @discord.slash_command(name='buy', description='Purchase an item from the shop')
-    @option("item_id", description="Item ID to purchase (see /shop)")
+    @option("item_id", str, description="Item ID to purchase (see /shop)")
     async def buy(self, ctx, item_id: str):
         shop_items = bot_data.get_shop_items()
         
@@ -229,6 +228,58 @@ class Economy(commands.Cog):
                 )
         
         await ctx.respond(embed=embed)
+
+    @discord.slash_command(name='give', description='Give coins to a user or everyone (Admin only)')
+    @discord.default_permissions(administrator=True)
+    @option("user", discord.Member, description="User to give coins to (or select @everyone)", required=True)
+    @option("amount", int, description="Amount of coins to give", required=True)
+    async def give(self, ctx, user: discord.Member, amount: int):
+        """Give coins to a user or @everyone (Admin only)."""
+        if amount <= 0:
+            await ctx.respond("❌ Amount must be greater than zero.", ephemeral=True)
+            return
+
+        # Check if @everyone was selected
+        if user.id == ctx.guild.id:
+            # Give to everyone in the server
+            members = [m for m in ctx.guild.members if not m.bot]
+            count = 0
+            for member in members:
+                user_id = str(member.id)
+                economy_data = bot_data.get_user_economy(user_id)
+                economy_data['coins'] += amount
+                bot_data.set_user_economy(user_id, economy_data)
+                count += 1
+
+            bot_data.save()
+
+            embed = discord.Embed(
+                title="💸 Global Giveaway!",
+                description=f"Gave **{amount:,} coins** to **everyone** ({count} members)!",
+                color=0xF1C40F,
+                timestamp=datetime.utcnow()
+            )
+            embed.set_footer(text=f'Given by {ctx.author.display_name}')
+            await ctx.respond(embed=embed)
+
+        else:
+            # Normal single-user give
+            user_id = str(user.id)
+            economy_data = bot_data.get_user_economy(user_id)
+            economy_data['coins'] += amount
+            bot_data.set_user_economy(user_id, economy_data)
+            bot_data.save()
+
+            embed = discord.Embed(
+                title='💸 Coins Given!',
+                description=f'Gave **{amount:,} coins** to {user.mention}',
+                color=0x2ECC71,
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=True)
+            embed.set_footer(text=f'Given by {ctx.author.display_name}')
+            await ctx.respond(embed=embed)
+
 
 def setup(bot):
     bot.add_cog(Economy(bot))
