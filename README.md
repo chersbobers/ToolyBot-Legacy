@@ -9,7 +9,6 @@
 [![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-red)](https://github.com/chersbobers/ToolyBot)
 
 
-=======
 The most peakest bot.
 
 # Setup and install.
