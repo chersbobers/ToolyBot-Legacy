@@ -1,7 +1,7 @@
 import json
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from utils.config import Config
 
 logger = logging.getLogger('tooly_bot.database')
@@ -27,6 +27,9 @@ class BotData:
                     loaded = json.load(f)
                     self.data.update(loaded)
                 logger.info('✅ Data loaded successfully')
+            else:
+                logger.info('ℹ️ No existing data file found, starting fresh')
+                self.save()  # Create the file
         except Exception as e:
             logger.error(f'❌ Error loading data: {e}')
     
@@ -34,6 +37,7 @@ class BotData:
         try:
             with open(Config.DATA_FILE, 'w') as f:
                 json.dump(self.data, f, indent=2)
+            logger.debug('💾 Data saved successfully')
         except Exception as e:
             logger.error(f'❌ Error saving data: {e}')
     
@@ -42,6 +46,7 @@ class BotData:
     
     def set_user_level(self, user_id: str, data: dict):
         self.data['levels'][user_id] = data
+        self.save()  # Auto-save after change
     
     def get_user_economy(self, user_id: str):
         return self.data['economy'].get(user_id, {
@@ -54,6 +59,7 @@ class BotData:
     
     def set_user_economy(self, user_id: str, data: dict):
         self.data['economy'][user_id] = data
+        self.save()  # Auto-save after change
     
     def get_warnings(self, user_id: str):
         return self.data['warnings'].get(user_id, [])
@@ -62,6 +68,7 @@ class BotData:
         if user_id not in self.data['warnings']:
             self.data['warnings'][user_id] = []
         self.data['warnings'][user_id].append(warning)
+        self.save()  # Auto-save after change
     
     def get_shop_items(self):
         return self.data.get('shop_items', {})
@@ -76,8 +83,9 @@ class BotData:
             self.data['inventory'][user_id] = {}
         
         self.data['inventory'][user_id][item_id] = {
-            'purchased': datetime.utcnow().timestamp()
+            'purchased': datetime.now(timezone.utc).timestamp()
         }
+        self.save()  # Auto-save after change
 
 class ServerSettings:
     def __init__(self):
@@ -89,6 +97,10 @@ class ServerSettings:
             if os.path.exists(Config.SETTINGS_FILE):
                 with open(Config.SETTINGS_FILE, 'r') as f:
                     self.settings = json.load(f)
+                logger.info('✅ Settings loaded successfully')
+            else:
+                logger.info('ℹ️ No existing settings file found, starting fresh')
+                self.save()  # Create the file
         except Exception as e:
             logger.error(f'❌ Error loading settings: {e}')
     
@@ -96,6 +108,7 @@ class ServerSettings:
         try:
             with open(Config.SETTINGS_FILE, 'w') as f:
                 json.dump(self.settings, f, indent=2)
+            logger.debug('💾 Settings saved successfully')
         except Exception as e:
             logger.error(f'❌ Error saving settings: {e}')
     
@@ -118,6 +131,10 @@ class ReactionRoles:
             if os.path.exists(Config.REACTIONS_FILE):
                 with open(Config.REACTIONS_FILE, 'r') as f:
                     self.data = json.load(f)
+                logger.info('✅ Reaction roles loaded successfully')
+            else:
+                logger.info('ℹ️ No existing reaction roles file found, starting fresh')
+                self.save()  # Create the file
         except Exception as e:
             logger.error(f'❌ Error loading reaction roles: {e}')
     
@@ -125,6 +142,7 @@ class ReactionRoles:
         try:
             with open(Config.REACTIONS_FILE, 'w') as f:
                 json.dump(self.data, f, indent=2)
+            logger.debug('💾 Reaction roles saved successfully')
         except Exception as e:
             logger.error(f'❌ Error saving reaction roles: {e}')
     
