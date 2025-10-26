@@ -12,3 +12,6 @@ beautifulsoup4==4.12.3
 
 # System Information (for botinfo command)
 psutil==5.9.8
+
+# MongoDB Driver
+pymongo==4.6.1
