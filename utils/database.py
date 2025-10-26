@@ -12,7 +12,7 @@ class BotData:
             'levels': {},
             'economy': {},
             'warnings': {},
-            'lastVideoId': '',
+            'lastVideoId': {},
             'leaderboard_messages': {},
             'shop_items': {},
             'inventory': {}
@@ -29,7 +29,7 @@ class BotData:
                 logger.info('✅ Data loaded successfully')
             else:
                 logger.info('ℹ️ No existing data file found, starting fresh')
-                self.save()  # Create the file
+                self.save()
         except Exception as e:
             logger.error(f'❌ Error loading data: {e}')
     
@@ -41,15 +41,19 @@ class BotData:
         except Exception as e:
             logger.error(f'❌ Error saving data: {e}')
     
-    def get_user_level(self, user_id: str):
-        return self.data['levels'].get(user_id, {'xp': 0, 'level': 1, 'lastMessage': 0})
+    def get_user_level(self, guild_id: str, user_id: str):
+        guild_data = self.data['levels'].get(guild_id, {})
+        return guild_data.get(user_id, {'xp': 0, 'level': 1, 'lastMessage': 0})
     
-    def set_user_level(self, user_id: str, data: dict):
-        self.data['levels'][user_id] = data
-        self.save()  # Auto-save after change
+    def set_user_level(self, guild_id: str, user_id: str, data: dict):
+        if guild_id not in self.data['levels']:
+            self.data['levels'][guild_id] = {}
+        self.data['levels'][guild_id][user_id] = data
+        self.save()
     
-    def get_user_economy(self, user_id: str):
-        return self.data['economy'].get(user_id, {
+    def get_user_economy(self, guild_id: str, user_id: str):
+        guild_data = self.data['economy'].get(guild_id, {})
+        return guild_data.get(user_id, {
             'coins': 0, 'bank': 0, 'lastDaily': 0, 'lastWork': 0,
             'lastFish': 0, 'lastGamble': 0, 'fishCaught': 0,
             'totalGambled': 0, 'gamblingWins': 0, 'gamblingLosses': 0,
@@ -57,35 +61,43 @@ class BotData:
             'currentStreak': 0, 'fishInventory': {}
         })
     
-    def set_user_economy(self, user_id: str, data: dict):
-        self.data['economy'][user_id] = data
-        self.save()  # Auto-save after change
+    def set_user_economy(self, guild_id: str, user_id: str, data: dict):
+        if guild_id not in self.data['economy']:
+            self.data['economy'][guild_id] = {}
+        self.data['economy'][guild_id][user_id] = data
+        self.save()
     
-    def get_warnings(self, user_id: str):
-        return self.data['warnings'].get(user_id, [])
+    def get_warnings(self, guild_id: str, user_id: str):
+        guild_data = self.data['warnings'].get(guild_id, {})
+        return guild_data.get(user_id, [])
     
-    def add_warning(self, user_id: str, warning: dict):
-        if user_id not in self.data['warnings']:
-            self.data['warnings'][user_id] = []
-        self.data['warnings'][user_id].append(warning)
-        self.save()  # Auto-save after change
+    def add_warning(self, guild_id: str, user_id: str, warning: dict):
+        if guild_id not in self.data['warnings']:
+            self.data['warnings'][guild_id] = {}
+        if user_id not in self.data['warnings'][guild_id]:
+            self.data['warnings'][guild_id][user_id] = []
+        self.data['warnings'][guild_id][user_id].append(warning)
+        self.save()
     
-    def get_shop_items(self):
-        return self.data.get('shop_items', {})
+    def get_shop_items(self, guild_id: str):
+        return self.data.get('shop_items', {}).get(guild_id, {})
     
-    def get_user_inventory(self, user_id: str):
-        return self.data.get('inventory', {}).get(user_id, {})
+    def get_user_inventory(self, guild_id: str, user_id: str):
+        guild_data = self.data.get('inventory', {}).get(guild_id, {})
+        return guild_data.get(user_id, {})
     
-    def add_to_inventory(self, user_id: str, item_id: str):
+    def add_to_inventory(self, guild_id: str, user_id: str, item_id: str):
         if 'inventory' not in self.data:
             self.data['inventory'] = {}
-        if user_id not in self.data['inventory']:
-            self.data['inventory'][user_id] = {}
+        if guild_id not in self.data['inventory']:
+            self.data['inventory'][guild_id] = {}
+        if user_id not in self.data['inventory'][guild_id]:
+            self.data['inventory'][guild_id][user_id] = {}
         
-        self.data['inventory'][user_id][item_id] = {
+        self.data['inventory'][guild_id][user_id][item_id] = {
             'purchased': datetime.now(timezone.utc).timestamp()
         }
-        self.save()  # Auto-save after change
+        self.save()
 
 class ServerSettings:
     def __init__(self):
@@ -100,7 +112,7 @@ class ServerSettings:
                 logger.info('✅ Settings loaded successfully')
             else:
                 logger.info('ℹ️ No existing settings file found, starting fresh')
-                self.save()  # Create the file
+                self.save()
         except Exception as e:
             logger.error(f'❌ Error loading settings: {e}')
     
@@ -134,7 +146,7 @@ class ReactionRoles:
                 logger.info('✅ Reaction roles loaded successfully')
             else:
                 logger.info('ℹ️ No existing reaction roles file found, starting fresh')
-                self.save()  # Create the file
+                self.save()
         except Exception as e:
             logger.error(f'❌ Error loading reaction roles: {e}')
     
@@ -146,29 +158,30 @@ class ReactionRoles:
         except Exception as e:
             logger.error(f'❌ Error saving reaction roles: {e}')
     
-    def add_reaction_role(self, message_id: str, emoji: str, role_id: str):
-        if message_id not in self.data:
-            self.data[message_id] = {}
-        self.data[message_id][emoji] = role_id
+    def add_reaction_role(self, guild_id: str, message_id: str, emoji: str, role_id: str):
+        if guild_id not in self.data:
+            self.data[guild_id] = {}
+        if message_id not in self.data[guild_id]:
+            self.data[guild_id][message_id] = {}
+        self.data[guild_id][message_id][emoji] = role_id
         self.save()
     
-    def remove_reaction_role(self, message_id: str, emoji: str = None):
-        if message_id in self.data:
+    def remove_reaction_role(self, guild_id: str, message_id: str, emoji: str = None):
+        if guild_id in self.data and message_id in self.data[guild_id]:
             if emoji:
-                self.data[message_id].pop(emoji, None)
-                if not self.data[message_id]:
-                    del self.data[message_id]
+                self.data[guild_id][message_id].pop(emoji, None)
+                if not self.data[guild_id][message_id]:
+                    del self.data[guild_id][message_id]
             else:
-                del self.data[message_id]
+                del self.data[guild_id][message_id]
             self.save()
     
-    def get_role_for_reaction(self, message_id: str, emoji: str):
-        return self.data.get(message_id, {}).get(emoji)
+    def get_role_for_reaction(self, guild_id: str, message_id: str, emoji: str):
+        return self.data.get(guild_id, {}).get(message_id, {}).get(emoji)
     
-    def get_all_for_message(self, message_id: str):
-        return self.data.get(message_id, {})
+    def get_all_for_message(self, guild_id: str, message_id: str):
+        return self.data.get(guild_id, {}).get(message_id, {})
 
-# Global instances
 bot_data = BotData()
 server_settings = ServerSettings()
 reaction_roles = ReactionRoles()

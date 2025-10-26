@@ -18,10 +18,6 @@ class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ==================================================
-    # 🏪 SHOP MANAGEMENT COMMANDS (ADMIN)
-    # ==================================================
-
     @discord.slash_command(name='createitem', description='[ADMIN] Create a new shop item')
     @option("item_id", description="Unique ID for the item")
     @option("name", description="Display name")
@@ -42,11 +38,19 @@ class Economy(commands.Cog):
         item_type: str,
         role_id: str = None
     ):
+        guild_id = str(ctx.guild.id)
+        
         if item_type == 'role' and not role_id:
             await ctx.respond('❌ Role items require a role_id!', ephemeral=True)
             return
 
-        shop_items = bot_data.get_shop_items()
+        if 'shop_items' not in bot_data.data:
+            bot_data.data['shop_items'] = {}
+        if guild_id not in bot_data.data['shop_items']:
+            bot_data.data['shop_items'][guild_id] = {}
+            
+        shop_items = bot_data.data['shop_items'][guild_id]
+        
         if item_id in shop_items:
             await ctx.respond(f'❌ Item with ID `{item_id}` already exists!', ephemeral=True)
             return
@@ -62,7 +66,7 @@ class Economy(commands.Cog):
             'creator': str(ctx.author.id)
         }
 
-        bot_data.data['shop_items'] = shop_items
+        bot_data.data['shop_items'][guild_id] = shop_items
         bot_data.save()
 
         embed = discord.Embed(
@@ -85,7 +89,8 @@ class Economy(commands.Cog):
     @option("item_id", description="ID of item to delete")
     @discord.default_permissions(administrator=True)
     async def deleteitem(self, ctx, item_id: str):
-        shop_items = bot_data.get_shop_items()
+        guild_id = str(ctx.guild.id)
+        shop_items = bot_data.get_shop_items(guild_id)
 
         if item_id not in shop_items:
             await ctx.respond(f'❌ Item `{item_id}` not found!', ephemeral=True)
@@ -93,7 +98,7 @@ class Economy(commands.Cog):
 
         item = shop_items[item_id]
         del shop_items[item_id]
-        bot_data.data['shop_items'] = shop_items
+        bot_data.data['shop_items'][guild_id] = shop_items
         bot_data.save()
 
         await ctx.respond(f'✅ Deleted item: **{item["name"]}** (`{item_id}`)', ephemeral=True)
@@ -101,7 +106,8 @@ class Economy(commands.Cog):
     @discord.slash_command(name='listitems', description='[ADMIN] List all shop items with IDs')
     @discord.default_permissions(administrator=True)
     async def listitems(self, ctx):
-        shop_items = bot_data.get_shop_items()
+        guild_id = str(ctx.guild.id)
+        shop_items = bot_data.get_shop_items(guild_id)
 
         if not shop_items:
             await ctx.respond('📦 No items in shop yet. Use `/createitem` to add some!', ephemeral=True)
@@ -126,16 +132,13 @@ class Economy(commands.Cog):
 
         await ctx.respond(embed=embed, ephemeral=True)
 
-    # ==================================================
-    # 🪙 ECONOMY COMMANDS
-    # ==================================================
-
     @discord.slash_command(name='balance', description='Check your balance')
     @option("user", discord.Member, description="User to check (optional)", required=False)
     async def balance(self, ctx, user: Optional[discord.Member] = None):
+        guild_id = str(ctx.guild.id)
         target = user or ctx.author
         user_id = str(target.id)
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
 
         embed = discord.Embed(
             title=f'💰 {target.display_name}\'s Balance',
@@ -155,8 +158,9 @@ class Economy(commands.Cog):
 
     @discord.slash_command(name='daily', description='Claim your daily reward')
     async def daily(self, ctx):
+        guild_id = str(ctx.guild.id)
         user_id = str(ctx.author.id)
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         now = datetime.utcnow().timestamp()
 
         if now - economy_data.get('lastDaily', 0) < Config.DAILY_COOLDOWN:
@@ -172,7 +176,7 @@ class Economy(commands.Cog):
         reward = random.randint(Config.DAILY_MIN, Config.DAILY_MAX)
         economy_data['coins'] += reward
         economy_data['lastDaily'] = now
-        bot_data.set_user_economy(user_id, economy_data)
+        bot_data.set_user_economy(guild_id, user_id, economy_data)
         bot_data.save()
 
         embed = discord.Embed(
@@ -186,8 +190,9 @@ class Economy(commands.Cog):
 
     @discord.slash_command(name='work', description='Work for coins')
     async def work(self, ctx):
+        guild_id = str(ctx.guild.id)
         user_id = str(ctx.author.id)
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         now = datetime.utcnow().timestamp()
 
         if now - economy_data.get('lastWork', 0) < Config.WORK_COOLDOWN:
@@ -207,7 +212,7 @@ class Economy(commands.Cog):
         reward = random.randint(Config.WORK_MIN, Config.WORK_MAX)
         economy_data['coins'] += reward
         economy_data['lastWork'] = now
-        bot_data.set_user_economy(user_id, economy_data)
+        bot_data.set_user_economy(guild_id, user_id, economy_data)
         bot_data.save()
 
         embed = discord.Embed(
@@ -221,7 +226,8 @@ class Economy(commands.Cog):
 
     @discord.slash_command(name='shop', description='Browse the shop')
     async def shop(self, ctx):
-        shop_items = bot_data.get_shop_items()
+        guild_id = str(ctx.guild.id)
+        shop_items = bot_data.get_shop_items(guild_id)
 
         if not shop_items:
             await ctx.respond('🛒 The shop is empty right now. Check back later!')
@@ -263,7 +269,7 @@ class Economy(commands.Cog):
             embed.add_field(name='✨ Consumables', value=consumable_text, inline=False)
 
         user_id = str(ctx.author.id)
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         embed.set_footer(
             text=f'Your balance: {economy_data["coins"]:,} coins | Use /inventory to see owned items'
         )
@@ -273,7 +279,8 @@ class Economy(commands.Cog):
     @discord.slash_command(name='buy', description='Purchase an item from the shop')
     @option("item_id", str, description="Item ID to purchase (see /shop)")
     async def buy(self, ctx, item_id: str):
-        shop_items = bot_data.get_shop_items()
+        guild_id = str(ctx.guild.id)
+        shop_items = bot_data.get_shop_items(guild_id)
 
         if item_id not in shop_items:
             await ctx.respond('❌ Invalid item ID! Use `/shop` to see available items.', ephemeral=True)
@@ -282,12 +289,12 @@ class Economy(commands.Cog):
         item = shop_items[item_id]
         user_id = str(ctx.author.id)
 
-        inventory = bot_data.get_user_inventory(user_id)
+        inventory = bot_data.get_user_inventory(guild_id, user_id)
         if item_id in inventory and item['type'] != 'consumable':
             await ctx.respond(f'❌ You already own **{item["name"]}**!', ephemeral=True)
             return
 
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         if economy_data['coins'] < item['price']:
             needed = item['price'] - economy_data['coins']
             await ctx.respond(
@@ -297,11 +304,10 @@ class Economy(commands.Cog):
             return
 
         economy_data['coins'] -= item['price']
-        bot_data.set_user_economy(user_id, economy_data)
-        bot_data.add_to_inventory(user_id, item_id)
+        bot_data.set_user_economy(guild_id, user_id, economy_data)
+        bot_data.add_to_inventory(guild_id, user_id, item_id)
         bot_data.save()
 
-        # ✅ FIXED: Proper permission and hierarchy check before role add
         if item['type'] == 'role' and item.get('role_id'):
             role = ctx.guild.get_role(int(item['role_id']))
             if role:
@@ -311,12 +317,12 @@ class Economy(commands.Cog):
                     except discord.Forbidden:
                         logger.warning(f"Missing permission to add role: {role.name}")
                         await ctx.respond(
-                            f'⚠️ I don’t have permission to give **{role.name}**. Check my role position!',
+                            f'⚠️ I don't have permission to give **{role.name}**. Check my role position!',
                             ephemeral=True
                         )
                 else:
                     await ctx.respond(
-                        f'⚠️ My highest role is below **{role.name}**, so I can’t assign it!',
+                        f'⚠️ My highest role is below **{role.name}**, so I can't assign it!',
                         ephemeral=True
                     )
 
@@ -337,9 +343,10 @@ class Economy(commands.Cog):
 
     @discord.slash_command(name='inventory', description='View your purchased items')
     async def inventory(self, ctx):
+        guild_id = str(ctx.guild.id)
         user_id = str(ctx.author.id)
-        inventory = bot_data.get_user_inventory(user_id)
-        shop_items = bot_data.get_shop_items()
+        inventory = bot_data.get_user_inventory(guild_id, user_id)
+        shop_items = bot_data.get_shop_items(guild_id)
 
         if not inventory:
             await ctx.respond('📦 Your inventory is empty! Visit `/shop` to buy items.')
@@ -371,6 +378,8 @@ class Economy(commands.Cog):
     @option("everyone", bool, description="Give to everyone in the server", required=False, default=False)
     @option("amount", int, description="Amount of coins to give", required=True)
     async def give(self, ctx, amount: int, user: discord.Member = None, everyone: bool = False):
+        guild_id = str(ctx.guild.id)
+        
         if amount <= 0:
             await ctx.respond("❌ Amount must be greater than zero.", ephemeral=True)
             return
@@ -380,9 +389,9 @@ class Economy(commands.Cog):
             count = 0
             for member in members:
                 user_id = str(member.id)
-                economy_data = bot_data.get_user_economy(user_id)
+                economy_data = bot_data.get_user_economy(guild_id, user_id)
                 economy_data['coins'] += amount
-                bot_data.set_user_economy(user_id, economy_data)
+                bot_data.set_user_economy(guild_id, user_id, economy_data)
                 count += 1
             bot_data.save()
 
@@ -401,9 +410,9 @@ class Economy(commands.Cog):
             return
 
         user_id = str(user.id)
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         economy_data['coins'] += amount
-        bot_data.set_user_economy(user_id, economy_data)
+        bot_data.set_user_economy(guild_id, user_id, economy_data)
         bot_data.save()
 
         embed = discord.Embed(
@@ -415,6 +424,63 @@ class Economy(commands.Cog):
         embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=True)
         embed.set_footer(text=f'Given by {ctx.author.display_name}')
         await ctx.respond(embed=embed)
+
+    @discord.slash_command(name='reseteconomy', description='[ADMIN] Reset ALL economy data for this server')
+    @discord.default_permissions(administrator=True)
+    async def reseteconomy(self, ctx):
+        guild_id = str(ctx.guild.id)
+        
+        view = discord.ui.View()
+        
+        async def confirm_callback(interaction):
+            if interaction.user.id != ctx.author.id:
+                await interaction.response.send_message("❌ Only the command user can confirm this!", ephemeral=True)
+                return
+                
+            if guild_id in bot_data.data.get('economy', {}):
+                del bot_data.data['economy'][guild_id]
+            if guild_id in bot_data.data.get('inventory', {}):
+                del bot_data.data['inventory'][guild_id]
+            bot_data.save()
+            
+            embed = discord.Embed(
+                title='✅ Economy Reset Complete',
+                description='All user coins, banks, and inventories have been wiped for this server.',
+                color=0xFF0000,
+                timestamp=datetime.utcnow()
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+        
+        async def cancel_callback(interaction):
+            if interaction.user.id != ctx.author.id:
+                await interaction.response.send_message("❌ Only the command user can cancel this!", ephemeral=True)
+                return
+            
+            embed = discord.Embed(
+                title='❌ Reset Cancelled',
+                description='Economy data was not reset.',
+                color=0x808080,
+                timestamp=datetime.utcnow()
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+        
+        confirm_button = discord.ui.Button(label="✅ Confirm Reset", style=discord.ButtonStyle.danger)
+        confirm_button.callback = confirm_callback
+        
+        cancel_button = discord.ui.Button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
+        cancel_button.callback = cancel_callback
+        
+        view.add_item(confirm_button)
+        view.add_item(cancel_button)
+        
+        embed = discord.Embed(
+            title='⚠️ Economy Reset Confirmation',
+            description='**WARNING:** This will permanently delete:\n• All user coins and bank balances\n• All user inventories\n\n**This action cannot be undone!**',
+            color=0xFF0000,
+            timestamp=datetime.utcnow()
+        )
+        
+        await ctx.respond(embed=embed, view=view, ephemeral=True)
 
 
 def setup(bot):

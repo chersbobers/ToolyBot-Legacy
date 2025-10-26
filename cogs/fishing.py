@@ -17,8 +17,9 @@ class Fishing(commands.Cog):
     
     @discord.slash_command(name='fish', description='Go fishing for coins and treasures')
     async def fish(self, ctx):
+        guild_id = str(ctx.guild.id)
         user_id = str(ctx.author.id)
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         now = datetime.utcnow().timestamp()
         
         if now - economy_data.get('lastFish', 0) < Config.FISH_COOLDOWN:
@@ -49,7 +50,7 @@ class Fishing(commands.Cog):
         economy_data['fishInventory'][fish_key]['count'] += 1
         economy_data['lastFish'] = now
         economy_data['fishCaught'] = economy_data.get('fishCaught', 0) + 1
-        bot_data.set_user_economy(user_id, economy_data)
+        bot_data.set_user_economy(guild_id, user_id, economy_data)
         bot_data.save()
         
         rarity = '⭐⭐⭐ LEGENDARY' if catch['value'] >= 1000 else '⭐⭐ RARE' if catch['value'] >= 200 else '⭐ UNCOMMON' if catch['value'] >= 100 else 'COMMON'
@@ -70,8 +71,9 @@ class Fishing(commands.Cog):
     
     @discord.slash_command(name='fishbag', description='View your fish inventory')
     async def fishbag(self, ctx):
+        guild_id = str(ctx.guild.id)
         user_id = str(ctx.author.id)
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         fish_inventory = economy_data.get('fishInventory', {})
         
         if not fish_inventory:
@@ -107,8 +109,9 @@ class Fishing(commands.Cog):
     @discord.slash_command(name='sellfish', description='Sell your caught fish')
     @option("fish_name", description='Name of fish to sell, or "all" to sell everything')
     async def sellfish(self, ctx, fish_name: str):
+        guild_id = str(ctx.guild.id)
         user_id = str(ctx.author.id)
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         fish_inventory = economy_data.get('fishInventory', {})
         
         if not fish_inventory:
@@ -128,7 +131,7 @@ class Fishing(commands.Cog):
             
             economy_data['coins'] += total_earned
             economy_data['fishInventory'] = {}
-            bot_data.set_user_economy(user_id, economy_data)
+            bot_data.set_user_economy(guild_id, user_id, economy_data)
             bot_data.save()
             
             embed = discord.Embed(
@@ -163,7 +166,7 @@ class Fishing(commands.Cog):
             
             economy_data['coins'] += total_earned
             del economy_data['fishInventory'][matched_fish]
-            bot_data.set_user_economy(user_id, economy_data)
+            bot_data.set_user_economy(guild_id, user_id, economy_data)
             bot_data.save()
             
             embed = discord.Embed(

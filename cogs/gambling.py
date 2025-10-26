@@ -20,8 +20,9 @@ class Gambling(commands.Cog):
     @option("game", description="Game type", choices=["slots", "dice", "coinflip", "roulette"])
     @option("amount", description="Amount to gamble", min_value=Config.GAMBLE_MIN)
     async def gamble(self, ctx, game: str, amount: int):
+        guild_id = str(ctx.guild.id)
         user_id = str(ctx.author.id)
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         
         max_bet = int(economy_data['coins'] * Config.GAMBLE_MAX_PERCENT)
         if amount > max_bet:
@@ -63,7 +64,7 @@ class Gambling(commands.Cog):
                 economy_data['biggestLoss'] = amount
         
         economy_data['totalGambled'] = economy_data.get('totalGambled', 0) + amount
-        bot_data.set_user_economy(user_id, economy_data)
+        bot_data.set_user_economy(guild_id, user_id, economy_data)
         bot_data.save()
         
         embed = result['embed']
@@ -74,9 +75,10 @@ class Gambling(commands.Cog):
     @discord.slash_command(name='gamblestats', description='View your gambling statistics')
     @option("user", discord.Member, description="User to check (optional)", required=False)
     async def gamblestats(self, ctx, user: Optional[discord.Member] = None):
+        guild_id = str(ctx.guild.id)
         target = user or ctx.author
         user_id = str(target.id)
-        economy_data = bot_data.get_user_economy(user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         
         total_games = economy_data.get('gamblingWins', 0) + economy_data.get('gamblingLosses', 0)
         

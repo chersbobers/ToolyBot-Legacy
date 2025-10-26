@@ -10,17 +10,13 @@ class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ──────────────── DM Reply Handler ────────────────
     @commands.Cog.listener()
     async def on_message(self, message):
-        # Ignore bot's own messages
         if message.author.bot:
             return
         
-        # Check if message is a DM (not in a guild)
         if isinstance(message.channel, discord.DMChannel):
             try:
-                # Create embed for the reply
                 embed = discord.Embed(
                     title="📬 DM Received",
                     description=message.content,
@@ -30,9 +26,7 @@ class Moderation(commands.Cog):
                 embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
                 embed.set_footer(text=f"User ID: {message.author.id}")
                 
-                # Send to all guilds' system channels or first text channel
                 for guild in self.bot.guilds:
-                    # Try to find a moderation/admin channel first
                     target_channel = discord.utils.get(guild.text_channels, name="mod-mail") or \
                                    discord.utils.get(guild.text_channels, name="staff") or \
                                    discord.utils.get(guild.text_channels, name="admin") or \
@@ -43,7 +37,6 @@ class Moderation(commands.Cog):
                         await target_channel.send(embed=embed)
                         logger.info(f"DM from {message.author} forwarded to {guild.name}")
                 
-                # Confirm receipt to user
                 await message.reply("✅ Your message has been sent to the server staff. They will respond soon!")
                 
             except Exception as e:
@@ -53,7 +46,6 @@ class Moderation(commands.Cog):
                 except:
                     pass
 
-    # ──────────────── Mute ────────────────
     @discord.slash_command(name='mute', description='Mute a member (Admin only)')
     @option("user", discord.Member, description="Member to mute")
     @option("reason", description="Reason for mute", required=False)
@@ -68,7 +60,6 @@ class Moderation(commands.Cog):
         await user.add_roles(role, reason=reason)
         await ctx.respond(f"🔇 {user.mention} has been muted. Reason: {reason}")
 
-    # ──────────────── Unmute ────────────────
     @discord.slash_command(name='unmute', description='Unmute a member (Admin only)')
     @option("user", discord.Member, description="Member to unmute")
     @discord.default_permissions(administrator=True)
@@ -80,7 +71,6 @@ class Moderation(commands.Cog):
         else:
             await ctx.respond("❌ That user is not muted.")
 
-    # ──────────────── Kick ────────────────
     @discord.slash_command(name='kick', description='Kick a member (Admin only)')
     @option("user", discord.Member, description="Member to kick")
     @option("reason", description="Reason for kick", required=False)
@@ -89,7 +79,6 @@ class Moderation(commands.Cog):
         await user.kick(reason=reason)
         await ctx.respond(f"👢 {user.mention} has been kicked. Reason: {reason}")
 
-    # ──────────────── Ban ────────────────
     @discord.slash_command(name='ban', description='Ban a member (Admin only)')
     @option("user", discord.Member, description="Member to ban")
     @option("reason", description="Reason for ban", required=False)
@@ -98,7 +87,6 @@ class Moderation(commands.Cog):
         await user.ban(reason=reason)
         await ctx.respond(f"🔨 {user.mention} has been banned. Reason: {reason}")
 
-    # ──────────────── Unban ────────────────
     @discord.slash_command(name='unban', description='Unban a member (Admin only)')
     @option("username", description="Username#1234 of the user to unban")
     @discord.default_permissions(administrator=True)
@@ -115,7 +103,6 @@ class Moderation(commands.Cog):
 
         await ctx.respond("❌ User not found in ban list.")
 
-    # ──────────────── DM ────────────────
     @discord.slash_command(name='dm', description='Send a direct message to a user (Admin only)')
     @option("user", discord.Member, description="User to DM")
     @option("message", description="Message to send")

@@ -48,8 +48,20 @@ class Info(commands.Cog):
     
     @discord.slash_command(name='botinfo', description='Show detailed bot information')
     async def botinfo(self, ctx):
-        total_users = len(bot_data.data.get('levels', {}))
-        total_coins = sum(e.get('coins', 0) + e.get('bank', 0) for e in bot_data.data.get('economy', {}).values())
+        guild_id = str(ctx.guild.id)
+        
+        total_users_global = sum(len(guild_data) for guild_data in bot_data.data.get('levels', {}).values())
+        total_users_server = len(bot_data.data.get('levels', {}).get(guild_id, {}))
+        
+        total_coins_global = sum(
+            sum(e.get('coins', 0) + e.get('bank', 0) for e in guild_data.values())
+            for guild_data in bot_data.data.get('economy', {}).values()
+        )
+        total_coins_server = sum(
+            e.get('coins', 0) + e.get('bank', 0) 
+            for e in bot_data.data.get('economy', {}).get(guild_id, {}).values()
+        )
+        
         total_guilds = len(self.bot.guilds)
         total_commands = len([cmd for cmd in self.bot.walk_application_commands()])
         
@@ -64,10 +76,13 @@ class Info(commands.Cog):
         )
         
         embed.add_field(name='📊 Servers', value=f'{total_guilds:,}', inline=True)
-        embed.add_field(name='👥 Users', value=f'{total_users:,}', inline=True)
-        embed.add_field(name='💰 Economy', value=f'{total_coins:,}', inline=True)
+        embed.add_field(name='👥 Users (Global)', value=f'{total_users_global:,}', inline=True)
+        embed.add_field(name='👤 Users (Server)', value=f'{total_users_server:,}', inline=True)
         
+        embed.add_field(name='💰 Economy (Global)', value=f'{total_coins_global:,}', inline=True)
+        embed.add_field(name='💵 Economy (Server)', value=f'{total_coins_server:,}', inline=True)
         embed.add_field(name='⚙️ Commands', value=f'{total_commands}', inline=True)
+        
         embed.add_field(name='🏓 Latency', value=f'{round(self.bot.latency * 1000)}ms', inline=True)
         embed.add_field(name='🧠 Memory', value=f'{memory_usage:.0f} MB', inline=True)
         
@@ -92,11 +107,12 @@ class Info(commands.Cog):
     @discord.slash_command(name='userinfo', description='Show user information')
     @option("user", discord.Member, description="User to check (optional)", required=False)
     async def userinfo(self, ctx, user: Optional[discord.Member] = None):
+        guild_id = str(ctx.guild.id)
         target = user or ctx.author
         user_id = str(target.id)
         
-        level_data = bot_data.get_user_level(user_id)
-        economy_data = bot_data.get_user_economy(user_id)
+        level_data = bot_data.get_user_level(guild_id, user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         
         embed = discord.Embed(
             title=f'ℹ️ {target.display_name}',
