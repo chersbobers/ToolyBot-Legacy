@@ -4,15 +4,23 @@ import logging
 from datetime import datetime, timezone
 from utils.config import Config
 from pymongo import MongoClient
-from dotenv import load_dotenv
 
 logger = logging.getLogger('tooly_bot.database')
-load_dotenv()
+
+# Only load dotenv locally; ignore on Render
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    logger.info("💡 python-dotenv not installed; skipping .env load (likely on Render)")
 
 USE_MONGO = True  # Toggle to False to use JSON
 
 if USE_MONGO:
-    client = MongoClient(os.getenv("MONGO_URI"))
+    mongo_uri = os.getenv("MONGO_URI")
+    if not mongo_uri:
+        logger.error("❌ MONGO_URI environment variable not set!")
+    client = MongoClient(mongo_uri)
     db = client['toolybot']
 
 class BotData:
@@ -32,7 +40,6 @@ class BotData:
             os.makedirs('data', exist_ok=True)
             self.load()
 
-        # Run migration automatically if switching to Mongo
         if USE_MONGO:
             self.migrate_json_to_mongo()
 
@@ -51,7 +58,7 @@ class BotData:
 
     def save(self):
         if USE_MONGO:
-            return  # Mongo updates are immediate
+            return
         try:
             with open(Config.DATA_FILE, 'w') as f:
                 json.dump(self.data, f, indent=2)
