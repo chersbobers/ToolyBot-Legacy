@@ -9,7 +9,7 @@ from utils.config import Config
 logger = logging.getLogger('tooly_bot.database')
 load_dotenv()
 
-USE_MONGO = True  # Set to False if you want to use JSON
+USE_MONGO = False  # Set to False if you want to use JSON
 
 # --- MongoDB Setup ---
 if USE_MONGO:
