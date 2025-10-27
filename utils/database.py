@@ -20,26 +20,68 @@ if USE_MONGO:
     client = MongoClient(mongo_uri)
     db = client['toolybot']
 
-# --- Placeholder dicts for imports ---
-reaction_roles = {}      # For your reactions cog
-server_settings = {}     # For YouTube cog / other server-specific settings
+class ReactionRoles:
+    """Handler for reaction roles"""
+    def __init__(self):
+        self.data = {}
+    
+    def get_role_for_reaction(self, guild_id, message_id, emoji):
+        """Get role ID for a reaction"""
+        return self.data.get(guild_id, {}).get(message_id, {}).get(emoji)
+    
+    def add_reaction_role(self, guild_id, message_id, emoji, role_id):
+        """Add a reaction role mapping"""
+        if guild_id not in self.data:
+            self.data[guild_id] = {}
+        if message_id not in self.data[guild_id]:
+            self.data[guild_id][message_id] = {}
+        self.data[guild_id][message_id][emoji] = role_id
+    
+    def remove_reaction_role(self, guild_id, message_id, emoji=None):
+        """Remove a reaction role mapping"""
+        if emoji:
+            if guild_id in self.data and message_id in self.data[guild_id]:
+                self.data[guild_id][message_id].pop(emoji, None)
+        else:
+            if guild_id in self.data:
+                self.data[guild_id].pop(message_id, None)
+
+class ServerSettings:
+    """Handler for server settings"""
+    def __init__(self):
+        self.data = {}
+    
+    def get(self, guild_id, key, default=None):
+        """Get a server setting"""
+        return self.data.get(guild_id, {}).get(key, default)
+    
+    def set(self, guild_id, key, value):
+        """Set a server setting"""
+        if guild_id not in self.data:
+            self.data[guild_id] = {}
+        self.data[guild_id][key] = value
+
+# Initialize global instances
+reaction_roles = ReactionRoles()
+server_settings = ServerSettings()
 
 class BotData:
     def __init__(self):
-        self.data = {}  # Always define to prevent AttributeErrors
+        # Always initialize data dict with default keys to prevent KeyError
+        self.data = {
+            'levels': {},
+            'economy': {},
+            'warnings': {},
+            'lastVideoId': None,  # Initialize as None instead of {}
+            'leaderboard_messages': {},
+            'shop_items': {},
+            'inventory': {}
+        }
 
         if USE_MONGO:
             self.db = db
+            logger.info('✅ Connected to MongoDB')
         else:
-            self.data = {
-                'levels': {},
-                'economy': {},
-                'warnings': {},
-                'lastVideoId': {},
-                'leaderboard_messages': {},
-                'shop_items': {},
-                'inventory': {}
-            }
             os.makedirs('data', exist_ok=True)
             self.load()
 
@@ -51,7 +93,8 @@ class BotData:
         try:
             if os.path.exists(Config.DATA_FILE):
                 with open(Config.DATA_FILE, 'r') as f:
-                    self.data.update(json.load(f))
+                    loaded_data = json.load(f)
+                    self.data.update(loaded_data)
                 logger.info('✅ Data loaded successfully')
             else:
                 logger.info('ℹ️ No existing data file, starting fresh')
@@ -132,6 +175,38 @@ class BotData:
                 self.data['levels'][guild_id] = {}
             self.data['levels'][guild_id][user_id] = data
             self.save()
+
+    # --- Shop Methods ---
+    def get_shop_items(self, guild_id):
+        """Get all shop items for a guild"""
+        if USE_MONGO:
+            # For MongoDB, you might want to store shop items differently
+            # For now, using the data dict
+            return self.data.get('shop_items', {}).get(guild_id, {})
+        else:
+            return self.data.get('shop_items', {}).get(guild_id, {})
+
+    # --- Inventory Methods ---
+    def get_user_inventory(self, guild_id, user_id):
+        """Get user's inventory"""
+        if USE_MONGO:
+            return self.data.get('inventory', {}).get(guild_id, {}).get(user_id, {})
+        else:
+            return self.data.get('inventory', {}).get(guild_id, {}).get(user_id, {})
+
+    def add_to_inventory(self, guild_id, user_id, item_id):
+        """Add an item to user's inventory"""
+        if 'inventory' not in self.data:
+            self.data['inventory'] = {}
+        if guild_id not in self.data['inventory']:
+            self.data['inventory'][guild_id] = {}
+        if user_id not in self.data['inventory'][guild_id]:
+            self.data['inventory'][guild_id][user_id] = {}
+        
+        self.data['inventory'][guild_id][user_id][item_id] = {
+            'purchased': datetime.utcnow().timestamp()
+        }
+        self.save()
 
     # --- Migration ---
     def migrate_json_to_mongo(self):
