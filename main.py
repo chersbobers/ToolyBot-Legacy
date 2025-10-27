@@ -18,7 +18,7 @@ intents.message_content = True
 intents.members = True
 intents.reactions = True
 
-bot = discord.Bot(intents=intents, auto_sync_commands=True)
+bot = discord.Bot(intents=intents)
 
 # ---------- Web Server ---------- #
 async def start_web_server():
@@ -27,12 +27,15 @@ async def start_web_server():
     
     app = web.Application()
     app.router.add_get('/', handle)
+    app.router.add_head('/', handle)  # Add HEAD support for health checks
     
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
+    # Use PORT environment variable (Render uses 3000 by default)
+    port = int(os.getenv('PORT', 3000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    logger.info('🌐 Web server running on port %s', os.getenv('PORT', 8080))
+    logger.info(f'🌐 Web server running on port {port}')
 
 # ---------- Events ---------- #
 @bot.event
@@ -40,6 +43,14 @@ async def on_ready():
     logger.info(f'✅ Logged in as {bot.user} (ID: {bot.user.id})')
     logger.info(f'📊 Connected to {len(bot.guilds)} guilds')
     
+    # Manually sync commands
+    try:
+        synced = await bot.sync_commands()
+        logger.info(f'✅ Synced {len(synced)} slash commands')
+    except Exception as e:
+        logger.error(f'❌ Failed to sync commands: {e}')
+    
+    # Set bot presence
     await bot.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.watching,
@@ -47,7 +58,12 @@ async def on_ready():
         )
     )
     
-    await start_web_server()
+    # Start web server
+    try:
+        await start_web_server()
+    except Exception as e:
+        logger.error(f'❌ Failed to start web server: {e}')
+    
     logger.info('🚀 All systems operational!')
 
 @bot.event
@@ -65,12 +81,32 @@ async def on_application_command_error(ctx, error):
             '❌ You don\'t have permission to use this command!',
             ephemeral=True
         )
-    else:
-        logger.error(f'Command error: {error}', exc_info=True)
+    elif isinstance(error, commands.MissingRequiredArgument):
         await ctx.respond(
-            '❌ An error occurred while executing this command.',
+            f'❌ Missing required argument: {error.param.name}',
             ephemeral=True
         )
+    else:
+        logger.error(f'Command error in {ctx.command}: {error}', exc_info=True)
+        try:
+            await ctx.respond(
+                '❌ An error occurred while executing this command.',
+                ephemeral=True
+            )
+        except:
+            pass  # Command might have already responded
+
+@bot.event
+async def on_connect():
+    logger.info('🔗 Bot connected to Discord')
+
+@bot.event
+async def on_disconnect():
+    logger.warning('⚠️ Bot disconnected from Discord')
+
+@bot.event
+async def on_resumed():
+    logger.info('♻️ Bot session resumed')
 
 # ---------- Load Cogs ---------- #
 def load_cogs():
