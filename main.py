@@ -70,7 +70,7 @@ async def on_application_command_error(ctx, error):
         await ctx.respond('❌ An error occurred while executing this command.', ephemeral=True)
 
 # --- Cog Loader ---
-# def load_cogs():
+def load_cogs():
     cogs = [
         'cogs.leveling',
         'cogs.economy',
@@ -84,7 +84,7 @@ async def on_application_command_error(ctx, error):
         'cogs.youtube'
     ]
     
-    for cog in cogs:
+for cog in cogs:
         try:
             bot.load_extension(cog)
             logger.info(f'✅ Loaded {cog}')
@@ -97,7 +97,7 @@ if __name__ == '__main__':
     if not token:
         logger.error('❌ TOKEN environment variable not set!')
         exit(1)
-    
-    load_cogs()
-    logger.info('🚀 Starting Tooly Bot...')
-    bot.run(token)
+
+load_cogs()
+logger.info('🚀 Starting Tooly Bot...')
+bot.run(token)
