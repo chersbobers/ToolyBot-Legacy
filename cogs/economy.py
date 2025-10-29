@@ -504,9 +504,9 @@ class Economy(commands.Cog):
             timestamp=datetime.utcnow()
         )
 
-        await ctx.respond(embed=embed, view=view, ephemeral=True)
 
 
 # -------------------- SETUP -------------------- #
 def setup(bot):
     bot.add_cog(Economy(bot))
+
