@@ -1,19 +1,38 @@
 name: Python Tests
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+    branches: [ main, master, dev ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11.0
+          python-version: '3.11'
+          cache: 'pip'
+      
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install pytest
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio pytest-cov
+      
       - name: Run tests
-        run: pytest
+        run: |
+          pytest -v --cov=. --cov-report=term-missing
+        continue-on-error: false
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        if: success()
+        with:
+          fail_ci_if_error: false
