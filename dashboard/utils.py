@@ -1,3 +1,5 @@
+import aiohttp
+
 async def get_guild_config(db, guild_id):
     """Get guild configuration from database"""
     config = await db.guild_configs.find_one({'guild_id': str(guild_id)})
@@ -88,7 +90,6 @@ async def get_guild_stats(db, bot, guild_id):
 
 async def check_user_permissions(session, guild_id, access_token):
     """Check if user has admin permissions in guild"""
-    import aiohttp
     
     # Get user's guilds
     async with aiohttp.ClientSession() as http_session:
