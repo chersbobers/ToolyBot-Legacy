@@ -3,6 +3,7 @@ py-cord==2.6.1
 
 # HTTP Requests & Web Server
 aiohttp==3.9.1
+aiohttp-session==2.12.0
 
 # RSS Feed Parser (YouTube notifications)
 feedparser==6.0.11
@@ -16,5 +17,7 @@ psutil==5.9.8
 # MongoDB Driver
 pymongo==4.6.1
 
+# Environment & Security
 python-dotenv==1.0.1
 dnspython==2.6.1
+cryptography==41.0.7

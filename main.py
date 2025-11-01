@@ -3,7 +3,7 @@ from discord.ext import commands
 import os
 import asyncio
 import logging
-from aiohttp import web, web_response
+from aiohttp import web, ClientSession
 import aiohttp_session
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from cryptography import fernet
@@ -150,7 +150,8 @@ async def handle_callback(request):
         return web.Response(text="Error: No code provided", status=400)
     
     # Exchange code for token
-    async with aiohttp.ClientSession() as session:
+    # FIX: Changed aiohttp.ClientSession to ClientSession (imported at top)
+    async with ClientSession() as session:
         data = {
             'client_id': DASHBOARD_CONFIG['CLIENT_ID'],
             'client_secret': DASHBOARD_CONFIG['CLIENT_SECRET'],
@@ -341,7 +342,8 @@ async def handle_api_guilds(request):
         return web.json_response({'error': 'Not authenticated'}, status=401)
     
     # Get user's guilds from Discord
-    async with aiohttp.ClientSession() as http_session:
+    # FIX: Changed to ClientSession
+    async with ClientSession() as http_session:
         headers = {'Authorization': f"Bearer {session['access_token']}"}
         async with http_session.get('https://discord.com/api/users/@me/guilds', headers=headers) as resp:
             user_guilds = await resp.json()
