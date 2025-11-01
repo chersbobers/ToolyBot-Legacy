@@ -3,7 +3,9 @@ from discord.ext import commands
 import os
 import asyncio
 import logging
+import pathlib
 from aiohttp import web, ClientSession
+import aiohttp
 import aiohttp_session
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from cryptography import fernet
@@ -53,7 +55,12 @@ async def create_dashboard():
     app.router.add_get('/api/guilds', handle_api_guilds)
     app.router.add_get('/api/guild/{guild_id}', handle_api_guild)
     app.router.add_post('/api/guild/{guild_id}/config', handle_api_update_config)
-    app.router.add_static('/static', 'dashboard/static')
+    
+    # Add static directory only if it exists
+    static_dir = pathlib.Path('dashboard/static')
+    if static_dir.exists() and static_dir.is_dir():
+        app.router.add_static('/static', 'dashboard/static')
+        logger.info('📁 Static directory mounted')
     
     return app
 
@@ -150,7 +157,6 @@ async def handle_callback(request):
         return web.Response(text="Error: No code provided", status=400)
     
     # Exchange code for token
-    # FIX: Changed aiohttp.ClientSession to ClientSession (imported at top)
     async with ClientSession() as session:
         data = {
             'client_id': DASHBOARD_CONFIG['CLIENT_ID'],
@@ -342,7 +348,6 @@ async def handle_api_guilds(request):
         return web.json_response({'error': 'Not authenticated'}, status=401)
     
     # Get user's guilds from Discord
-    # FIX: Changed to ClientSession
     async with ClientSession() as http_session:
         headers = {'Authorization': f"Bearer {session['access_token']}"}
         async with http_session.get('https://discord.com/api/users/@me/guilds', headers=headers) as resp:
@@ -400,7 +405,7 @@ async def start_web_server():
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    logger.info(f'🌐 Dashboard running on http://localhost:{port}')
+    logger.info(f'🌐 Dashboard running on http://0.0.0.0:{port}')
 
 # --- Discord Bot Events ---
 @bot.event
