@@ -16,5 +16,8 @@ dnspython>=2.0.0
 # Environment Variables
 python-dotenv>=1.0.0
 
+# YouTube/RSS feeds
+feedparser>=6.0.0
+
 # Optional but recommended
 psutil>=5.9.0
