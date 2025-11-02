@@ -25,6 +25,8 @@ class BotData:
         self.leaderboards_col = db['leaderboards']
         self.shop_items_col = db['shop_items']
         self.inventory_col = db['inventory']
+        self.profiles_col = db['profiles']
+        self.bot_profiles_col = db['bot_profiles']
         
         logger.info('✅ MongoDB connection initialized')
         
@@ -32,6 +34,8 @@ class BotData:
         try:
             self.levels_col.create_index([('guild_id', 1), ('user_id', 1)], unique=True)
             self.economy_col.create_index([('guild_id', 1), ('user_id', 1)], unique=True)
+            self.profiles_col.create_index([('guild_id', 1), ('user_id', 1)], unique=True)
+            self.bot_profiles_col.create_index([('guild_id', 1)], unique=True)
         except:
             pass  # Indexes may already exist
     
@@ -113,6 +117,65 @@ class BotData:
             upsert=True
         )
         logger.debug(f'Updated economy for user {user_id} in guild {guild_id}')
+    
+    def get_user_profile(self, guild_id: str, user_id: str) -> Dict[str, Any]:
+        """Get user profile customizations"""
+        data = self.profiles_col.find_one({
+            'guild_id': guild_id,
+            'user_id': user_id
+        })
+        
+        if not data:
+            return {}
+        
+        return {
+            'customName': data.get('customName'),
+            'customPfp': data.get('customPfp')
+        }
+    
+    def set_user_profile(self, guild_id: str, user_id: str, profile_data: Dict[str, Any]):
+        """Set user profile customizations"""
+        update_data = {'updated_at': datetime.utcnow()}
+        
+        if 'customName' in profile_data:
+            update_data['customName'] = profile_data['customName']
+        if 'customPfp' in profile_data:
+            update_data['customPfp'] = profile_data['customPfp']
+        
+        self.profiles_col.update_one(
+            {'guild_id': guild_id, 'user_id': user_id},
+            {'$set': update_data},
+            upsert=True
+        )
+        logger.debug(f'Updated profile for user {user_id} in guild {guild_id}')
+    
+    def get_bot_profile(self, guild_id: str) -> Dict[str, Any]:
+        """Get bot profile customizations for a specific guild"""
+        data = self.bot_profiles_col.find_one({'guild_id': guild_id})
+        
+        if not data:
+            return {}
+        
+        return {
+            'customName': data.get('customName'),
+            'customPfp': data.get('customPfp')
+        }
+    
+    def set_bot_profile(self, guild_id: str, profile_data: Dict[str, Any]):
+        """Set bot profile customizations for a specific guild"""
+        update_data = {'updated_at': datetime.utcnow()}
+        
+        if 'customName' in profile_data:
+            update_data['customName'] = profile_data['customName']
+        if 'customPfp' in profile_data:
+            update_data['customPfp'] = profile_data['customPfp']
+        
+        self.bot_profiles_col.update_one(
+            {'guild_id': guild_id},
+            {'$set': update_data},
+            upsert=True
+        )
+        logger.info(f'Updated bot profile for guild {guild_id}')
     
     def get_user_inventory(self, guild_id: str, user_id: str) -> Dict[str, Any]:
         """Get user inventory"""
