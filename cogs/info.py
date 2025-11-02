@@ -113,13 +113,20 @@ class Info(commands.Cog):
         
         level_data = bot_data.get_user_level(guild_id, user_id)
         economy_data = bot_data.get_user_economy(guild_id, user_id)
+        profile_data = bot_data.get_user_profile(guild_id, user_id)
+        
+        # Use custom name or default display name
+        display_name = profile_data.get('customName', target.display_name)
         
         embed = discord.Embed(
-            title=f'ℹ️ {target.display_name}',
+            title=f'ℹ️ {display_name}',
             color=0x9B59B6,
             timestamp=datetime.utcnow()
         )
-        embed.set_thumbnail(url=target.display_avatar.url)
+        
+        # Use custom pfp or default avatar
+        pfp_url = profile_data.get('customPfp', target.display_avatar.url)
+        embed.set_thumbnail(url=pfp_url)
         
         embed.add_field(name='👤 Username', value=f'{target.name}#{target.discriminator}', inline=True)
         embed.add_field(name='🆔 User ID', value=str(target.id), inline=True)
@@ -139,6 +146,175 @@ class Info(commands.Cog):
             embed.add_field(name='🎰 Gambling Wins', value=f"{economy_data['gamblingWins']:,}", inline=True)
         
         await ctx.respond(embed=embed)
+    
+    @discord.slash_command(name='customize', description='Customize your profile appearance')
+    @option("name", str, description="Custom display name (leave blank to reset)", required=False)
+    @option("pfp", str, description="Custom profile picture URL (leave blank to reset)", required=False)
+    async def customize(self, ctx, name: Optional[str] = None, pfp: Optional[str] = None):
+        guild_id = str(ctx.guild.id)
+        user_id = str(ctx.author.id)
+        
+        if name is None and pfp is None:
+            embed = discord.Embed(
+                title='❌ No Changes',
+                description='Please provide at least one option to customize!',
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+        
+        profile_data = bot_data.get_user_profile(guild_id, user_id)
+        changes = []
+        
+        # Update custom name
+        if name is not None:
+            if len(name) > 32:
+                embed = discord.Embed(
+                    title='❌ Name Too Long',
+                    description='Custom name must be 32 characters or less!',
+                    color=0xFF0000
+                )
+                await ctx.respond(embed=embed, ephemeral=True)
+                return
+            
+            profile_data['customName'] = name
+            changes.append(f"**Name:** {name}")
+        
+        # Update custom pfp
+        if pfp is not None:
+            # Basic URL validation
+            if not (pfp.startswith('http://') or pfp.startswith('https://')):
+                embed = discord.Embed(
+                    title='❌ Invalid URL',
+                    description='Profile picture must be a valid URL starting with http:// or https://',
+                    color=0xFF0000
+                )
+                await ctx.respond(embed=embed, ephemeral=True)
+                return
+            
+            profile_data['customPfp'] = pfp
+            changes.append(f"**Profile Picture:** Set")
+        
+        bot_data.set_user_profile(guild_id, user_id, profile_data)
+        
+        embed = discord.Embed(
+            title='✅ Profile Customized!',
+            description='\n'.join(changes),
+            color=0x00FF00,
+            timestamp=datetime.utcnow()
+        )
+        
+        if pfp:
+            embed.set_thumbnail(url=pfp)
+        
+        embed.set_footer(text=f'Use /userinfo to see your customized profile!')
+        
+        await ctx.respond(embed=embed)
+    
+    @discord.slash_command(name='customizebot', description='Customize the bot\'s appearance (Admin only)')
+    @option("name", str, description="Custom bot display name", required=False)
+    @option("pfp", str, description="Custom bot profile picture URL", required=False)
+    @discord.default_permissions(administrator=True)
+    async def customizebot(self, ctx, name: Optional[str] = None, pfp: Optional[str] = None):
+        if name is None and pfp is None:
+            embed = discord.Embed(
+                title='❌ No Changes',
+                description='Please provide at least one option to customize!',
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            return
+        
+        changes = []
+        
+        try:
+            # Update bot name
+            if name is not None:
+                if len(name) > 32:
+                    embed = discord.Embed(
+                        title='❌ Name Too Long',
+                        description='Bot name must be 32 characters or less!',
+                        color=0xFF0000
+                    )
+                    await ctx.respond(embed=embed, ephemeral=True)
+                    return
+                
+                await self.bot.user.edit(username=name)
+                changes.append(f"**Name:** {name}")
+                logger.info(f"Bot name changed to: {name}")
+            
+            # Update bot pfp
+            if pfp is not None:
+                # Basic URL validation
+                if not (pfp.startswith('http://') or pfp.startswith('https://')):
+                    embed = discord.Embed(
+                        title='❌ Invalid URL',
+                        description='Profile picture must be a valid URL starting with http:// or https://',
+                        color=0xFF0000
+                    )
+                    await ctx.respond(embed=embed, ephemeral=True)
+                    return
+                
+                # Download and set the image
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(pfp) as resp:
+                        if resp.status != 200:
+                            embed = discord.Embed(
+                                title='❌ Failed to Download Image',
+                                description='Could not download the image from the provided URL.',
+                                color=0xFF0000
+                            )
+                            await ctx.respond(embed=embed, ephemeral=True)
+                            return
+                        
+                        image_data = await resp.read()
+                        await self.bot.user.edit(avatar=image_data)
+                        changes.append(f"**Profile Picture:** Updated")
+                        logger.info(f"Bot avatar changed")
+            
+            embed = discord.Embed(
+                title='✅ Bot Customized!',
+                description='\n'.join(changes),
+                color=0x00FF00,
+                timestamp=datetime.utcnow()
+            )
+            
+            if pfp:
+                embed.set_thumbnail(url=pfp)
+            
+            embed.set_footer(text=f'Changes applied successfully!')
+            
+            await ctx.respond(embed=embed)
+            
+        except discord.HTTPException as e:
+            embed = discord.Embed(
+                title='❌ Error',
+                description=f'Failed to update bot: {str(e)}',
+                color=0xFF0000
+            )
+            await ctx.respond(embed=embed, ephemeral=True)
+            logger.error(f"Error customizing bot: {e}")
+    
+    @discord.slash_command(name='resetprofile', description='Reset your profile customizations')
+    async def resetprofile(self, ctx):
+        guild_id = str(ctx.guild.id)
+        user_id = str(ctx.author.id)
+        
+        profile_data = bot_data.get_user_profile(guild_id, user_id)
+        
+        # Clear custom settings
+        profile_data.pop('customName', None)
+        profile_data.pop('customPfp', None)
+        
+        bot_data.set_user_profile(guild_id, user_id, profile_data)
+        
+        embed = discord.Embed(
+            title='✅ Profile Reset!',
+            description='Your profile has been reset to default settings.',
+            color=0x00FF00
+        )
+        await ctx.respond(embed=embed, ephemeral=True)
 
 def setup(bot):
     bot.add_cog(Info(bot))
