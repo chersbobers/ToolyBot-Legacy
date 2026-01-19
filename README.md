@@ -1,3 +1,15 @@
+# Hello
+Too the one person using tooly, I am remaking tooly again you can still use this but it slightly broken and bugs will not be fixed.
+
+
+
+
+
+
+
+
+
+
 # Tooly Bot
 
 ![Tooly Bot](https://files.catbox.moe/6fi55l.png)
